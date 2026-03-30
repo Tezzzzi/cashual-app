@@ -1,22 +1,31 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import {
+  int,
+  mysqlEnum,
+  mysqlTable,
+  text,
+  timestamp,
+  varchar,
+  bigint,
+  boolean,
+  decimal,
+} from "drizzle-orm/mysql-core";
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
+// ─── Users ───────────────────────────────────────────────────────────
 export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
   id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  // Telegram-specific fields
+  telegramId: varchar("telegramId", { length: 64 }).unique(),
+  telegramUsername: varchar("telegramUsername", { length: 128 }),
+  telegramFirstName: varchar("telegramFirstName", { length: 128 }),
+  telegramLastName: varchar("telegramLastName", { length: 128 }),
+  telegramPhotoUrl: text("telegramPhotoUrl"),
+  preferredLanguage: varchar("preferredLanguage", { length: 10 }).default("ru"),
+  preferredCurrency: varchar("preferredCurrency", { length: 10 }).default("AZN"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -25,4 +34,62 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+// ─── Categories ──────────────────────────────────────────────────────
+export const categories = mysqlTable("categories", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  icon: varchar("icon", { length: 64 }).notNull().default("📦"),
+  color: varchar("color", { length: 32 }).notNull().default("#6366f1"),
+  type: mysqlEnum("type", ["income", "expense", "both"]).default("both").notNull(),
+  isPreset: boolean("isPreset").default(false).notNull(),
+  userId: int("userId"), // null = preset (global), non-null = user-created
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Category = typeof categories.$inferSelect;
+export type InsertCategory = typeof categories.$inferInsert;
+
+// ─── Transactions ────────────────────────────────────────────────────
+export const transactions = mysqlTable("transactions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  categoryId: int("categoryId").notNull(),
+  type: mysqlEnum("type", ["income", "expense"]).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 10 }).default("AZN").notNull(),
+  description: text("description"),
+  date: bigint("date", { mode: "number" }).notNull(), // UTC timestamp ms
+  isFamily: boolean("isFamily").default(false).notNull(),
+  familyGroupId: int("familyGroupId"), // null = personal
+  sourceLanguage: varchar("sourceLanguage", { length: 10 }), // detected language
+  rawTranscription: text("rawTranscription"), // original voice text
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertTransaction = typeof transactions.$inferInsert;
+
+// ─── Family Groups ───────────────────────────────────────────────────
+export const familyGroups = mysqlTable("familyGroups", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  inviteCode: varchar("inviteCode", { length: 16 }).notNull().unique(),
+  ownerId: int("ownerId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type FamilyGroup = typeof familyGroups.$inferSelect;
+export type InsertFamilyGroup = typeof familyGroups.$inferInsert;
+
+// ─── Family Group Members ────────────────────────────────────────────
+export const familyGroupMembers = mysqlTable("familyGroupMembers", {
+  id: int("id").autoincrement().primaryKey(),
+  familyGroupId: int("familyGroupId").notNull(),
+  userId: int("userId").notNull(),
+  joinedAt: timestamp("joinedAt").defaultNow().notNull(),
+});
+
+export type FamilyGroupMember = typeof familyGroupMembers.$inferSelect;
+export type InsertFamilyGroupMember = typeof familyGroupMembers.$inferInsert;
