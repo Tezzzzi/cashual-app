@@ -25,9 +25,8 @@ import {
   isGroupMember,
   updateUserTelegram,
 } from "./db";
-import { transcribeAudio } from "./_core/voiceTranscription";
-import { invokeLLM } from "./_core/llm";
-import { storagePut } from "./storage";
+import { transcribeAudio } from "./_core/openai-whisper";
+import { invokeLLM } from "./_core/openai-llm";
 
 // Seed preset categories on startup
 seedPresetCategories().catch(console.error);
@@ -148,16 +147,18 @@ const voiceRouter = router({
   transcribeAndParse: protectedProcedure
     .input(
       z.object({
-        audioUrl: z.string(),
+        audioBase64: z.string(),
         language: z.string().optional(),
+        mimeType: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Step 1: Transcribe audio
+      // Step 1: Transcribe audio from base64
+      const audioBuffer = Buffer.from(input.audioBase64, "base64");
       const transcription = await transcribeAudio({
-        audioUrl: input.audioUrl,
+        audioBuffer,
         language: input.language,
-        prompt: "Transcribe the user's financial transaction. The user may speak in Russian, Azerbaijani, or English. They will mention an amount, category, and description of a financial transaction.",
+        mimeType: input.mimeType,
       });
 
       if ("error" in transcription) {
@@ -255,15 +256,14 @@ Rules:
     .mutation(async ({ ctx, input }) => {
       const buffer = Buffer.from(input.audioBase64, "base64");
       const sizeMB = buffer.length / (1024 * 1024);
-      if (sizeMB > 16) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Audio file too large (max 16MB)" });
+      if (sizeMB > 25) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Audio file too large (max 25MB)" });
       }
 
-      const ext = input.mimeType.includes("webm") ? "webm" : input.mimeType.includes("mp4") ? "m4a" : "wav";
-      const key = `audio/${ctx.user.id}/${nanoid()}.${ext}`;
-      const { url } = await storagePut(key, buffer, input.mimeType);
-      return { url, key };
-    }),
+      // Return a temporary ID for the audio (stored in memory during transcription)
+      const audioId = nanoid();
+      return { audioId, size: buffer.length };
+    })
 });
 
 // ─── Reports Router ──────────────────────────────────────────────────
@@ -335,9 +335,11 @@ const reportsRouter = router({
         .join("\n");
 
       const csv = header + rows;
-      const key = `exports/${ctx.user.id}/${nanoid()}.csv`;
-      const { url } = await storagePut(key, csv, "text/csv");
-      return { url, filename: `transactions_${new Date().toISOString().split("T")[0]}.csv` };
+      // Return CSV data directly (no S3 storage)
+      return { 
+        csv,
+        filename: `transactions_${new Date().toISOString().split("T")[0]}.csv`,
+      };
     }),
 });
 

@@ -38,5 +38,15 @@
 - [x] Multi-language support hints (RU/AZ/EN voice input)
 
 ## Deployment & Instructions
-- [ ] Deploy web application
-- [ ] Prepare Telegram bot connection instructions
+- [x] Deploy web application
+- [x] Prepare Telegram bot connection instructions
+
+## Railway Deployment - Cashual Rebrand
+- [ ] Rebrand app to Cashual (CA$HUAL) with logo
+- [ ] Adapt project for standalone Railway deployment (remove Manus OAuth dependency)
+- [ ] Add Telegram Bot integration with webhook handler
+- [ ] Create Railway project with MySQL database
+- [ ] Deploy backend + frontend to Railway
+- [ ] Configure all environment variables on Railway
+- [ ] Set up Telegram bot webhook
+- [ ] Verify deployment works end-to-end

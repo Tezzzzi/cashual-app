@@ -31,7 +31,6 @@ export default function VoiceRecorder({ onResult, language }: VoiceRecorderProps
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const uploadAudio = trpc.voice.uploadAudio.useMutation();
   const transcribeAndParse = trpc.voice.transcribeAndParse.useMutation();
 
   const startRecording = useCallback(async () => {
@@ -62,7 +61,7 @@ export default function VoiceRecorder({ onResult, language }: VoiceRecorderProps
 
         setIsProcessing(true);
         try {
-          // Convert to base64 and upload
+          // Convert to base64 for transcription
           const reader = new FileReader();
           const base64 = await new Promise<string>((resolve, reject) => {
             reader.onload = () => {
@@ -73,13 +72,10 @@ export default function VoiceRecorder({ onResult, language }: VoiceRecorderProps
             reader.readAsDataURL(blob);
           });
 
-          const { url } = await uploadAudio.mutateAsync({
+          // Transcribe audio directly (no upload needed)
+          const result = await transcribeAndParse.mutateAsync({
             audioBase64: base64,
             mimeType: "audio/webm",
-          });
-
-          const result = await transcribeAndParse.mutateAsync({
-            audioUrl: url,
             language,
           });
 
@@ -103,7 +99,7 @@ export default function VoiceRecorder({ onResult, language }: VoiceRecorderProps
     } catch (err) {
       toast.error("Нет доступа к микрофону");
     }
-  }, [language, onResult, uploadAudio, transcribeAndParse]);
+  }, [language, onResult, transcribeAndParse]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {

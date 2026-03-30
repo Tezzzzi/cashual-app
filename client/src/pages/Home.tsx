@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { useTelegramAuth } from "@/_core/hooks/useTelegramAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,12 +16,12 @@ import {
   Loader2,
   LogIn,
 } from "lucide-react";
-import { getLoginUrl } from "@/const";
+
 import VoiceRecorder from "@/components/VoiceRecorder";
 import TransactionForm from "@/components/TransactionForm";
 
 export default function Home() {
-  const { user, loading, isAuthenticated } = useAuth();
+  const { user, loading, isAuthenticated, error } = useTelegramAuth();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [voiceResult, setVoiceResult] = useState<any>(null);
 
@@ -60,11 +60,9 @@ export default function Home() {
             азербайджанском или английском.
           </p>
         </div>
-        <Button asChild className="w-full max-w-xs h-12">
-          <a href={getLoginUrl()}>
-            <LogIn className="h-4 w-4 mr-2" />
-            Войти
-          </a>
+        <Button disabled className="w-full max-w-xs h-12">
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          Загрузка...
         </Button>
       </div>
     );
