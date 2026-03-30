@@ -50,3 +50,14 @@
 - [ ] Configure all environment variables on Railway
 - [ ] Set up Telegram bot webhook
 - [ ] Verify deployment works end-to-end
+
+## Actual Railway Deployment (Automated)
+- [ ] Install Railway CLI and authenticate
+- [ ] Create Railway project via API
+- [ ] Create MySQL service in project
+- [ ] Deploy application to Railway
+- [ ] Configure all environment variables
+- [ ] Run database migrations
+- [ ] Set up Telegram webhook
+- [ ] Verify deployment is working
+- [ ] Provide final URL to user
