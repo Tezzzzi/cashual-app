@@ -431,6 +431,26 @@ const translations = {
   },
 } as const;
 
+// ─── Category Name Translations ───────────────────────────────────────────────
+// Maps Russian preset category names → AZ and EN equivalents
+export const categoryTranslations: Record<string, { az: string; en: string }> = {
+  "Продукты":     { az: "Ərzaq",          en: "Groceries" },
+  "Транспорт":    { az: "Nəqliyyat",      en: "Transport" },
+  "Жильё":        { az: "Mənzil",         en: "Housing" },
+  "Развлечения":  { az: "Əyləncə",        en: "Entertainment" },
+  "Здоровье":     { az: "Sağlamlıq",      en: "Health" },
+  "Одежда":       { az: "Geyim",          en: "Clothing" },
+  "Образование":  { az: "Təhsil",         en: "Education" },
+  "Рестораны":    { az: "Restoranlar",    en: "Restaurants" },
+  "Связь":        { az: "Rabitə",         en: "Communication" },
+  "Подписки":     { az: "Abunəliklər",    en: "Subscriptions" },
+  "Подарки":      { az: "Hədiyyələr",     en: "Gifts" },
+  "Зарплата":     { az: "Maaş",           en: "Salary" },
+  "Фриланс":      { az: "Frilansinq",     en: "Freelance" },
+  "Инвестиции":   { az: "İnvestisiyalar", en: "Investments" },
+  "Другое":       { az: "Digər",          en: "Other" },
+};
+
 export type Lang = keyof typeof translations;
 export type TranslationKey = keyof typeof translations.ru;
 
@@ -440,12 +460,14 @@ type LanguageContextType = {
   lang: Lang;
   setLang: (lang: Lang) => void;
   t: (key: TranslationKey) => string;
+  translateCategory: (ruName: string) => string;
 };
 
 const LanguageContext = createContext<LanguageContextType>({
   lang: "ru",
   setLang: () => {},
   t: (key) => translations.ru[key],
+  translateCategory: (ruName) => ruName,
 });
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -487,8 +509,16 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     return (translations[lang] as any)[key] ?? (translations.ru as any)[key] ?? key;
   };
 
+  // Translate a Russian category name to the current language
+  const translateCategory = (ruName: string): string => {
+    if (lang === "ru") return ruName;
+    const entry = categoryTranslations[ruName];
+    if (!entry) return ruName; // fallback: keep Russian for custom categories
+    return lang === "az" ? entry.az : entry.en;
+  };
+
   return (
-    <LanguageContext.Provider value={{ lang, setLang, t }}>
+    <LanguageContext.Provider value={{ lang, setLang, t, translateCategory }}>
       {children}
     </LanguageContext.Provider>
   );

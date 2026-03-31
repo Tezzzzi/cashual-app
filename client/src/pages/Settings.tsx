@@ -42,7 +42,7 @@ const COLOR_OPTIONS = [
 
 export default function Settings() {
   const { isAuthenticated, user, logout } = useAuth();
-  const { t, lang, setLang } = useLanguage();
+  const { t, lang, setLang, translateCategory } = useLanguage();
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [newCatIcon, setNewCatIcon] = useState("📦");
@@ -224,7 +224,7 @@ export default function Settings() {
                     >
                       {c.icon}
                     </span>
-                    <span className="text-sm">{c.name}</span>
+                    <span className="text-sm">{translateCategory(c.name)}</span>
                   </div>
                   <Button
                     variant="ghost"
@@ -251,7 +251,7 @@ export default function Settings() {
                 key={c.id}
                 className="text-xs px-2 py-1 rounded-full bg-secondary"
               >
-                {c.icon} {c.name}
+                {c.icon} {translateCategory(c.name)}
               </span>
             ))}
           </div>

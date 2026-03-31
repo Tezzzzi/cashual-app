@@ -81,3 +81,8 @@
 - [x] New professional logo (clean, modern, finance-oriented, not casino-like)
 - [x] Default budget preference setting (personal vs family toggle that persists)
 - [x] Receipt/screenshot recognition via vision AI (camera capture, OCR parsing, auto-fill transaction)
+
+## Bug Fixes (Round 3)
+- [x] Fix reports time filter broken (7d/30d/etc show zero data, only "All" works)
+- [x] Fix category names not translating when language is switched
+- [x] Fix receipt scanner only saves first transaction (need multi-transaction + duplicate detection)

@@ -294,21 +294,34 @@ Rules:
         messages: [
           {
             role: "system",
-            content: `You are a financial receipt/transaction parser. Analyze the provided image (receipt, bank screenshot, or transaction notification) and extract structured transaction data.
+            content: `You are a financial transaction image parser. Analyze the provided image and extract transaction data.
 
 Available categories: ${categoryNames}
 Current date: ${now.toISOString()}
-User's preferred currency: ${ctx.user.preferredCurrency || "AZN"}
+Default currency: ${ctx.user.preferredCurrency || "AZN"}
 
-Rules:
-- Identify if it's an expense or income
-- Extract the total amount (the final amount paid, not subtotals)
-- Detect the currency from the receipt (default: ${ctx.user.preferredCurrency || "AZN"})
-- Match to the closest available category
-- Extract merchant name or description
-- Extract the date from the receipt if visible, otherwise use today
-- If multiple items, use the total
-- For bank screenshots, extract the transaction amount and merchant`,
+CRITICAL RULES — read carefully:
+
+1. BANK/WALLET APP SCREENSHOT (e.g. Apple Wallet, bank app showing "Latest Transactions", transaction history list):
+   → Extract EACH individual transaction as a SEPARATE entry in the transactions array.
+   → Do NOT merge them into one. Each row in the list = one transaction object.
+   → For relative dates ("3 hours ago", "Yesterday", "Sunday", "Saturday"), convert to absolute UTC timestamps using the current date: ${now.toISOString()}
+
+2. STORE RECEIPT / CASH REGISTER RECEIPT (кассовый чек — a paper receipt from a store/restaurant):
+   → Extract ONLY the TOTAL/FINAL amount as a SINGLE transaction.
+   → Use the store/merchant name as the description.
+   → Do NOT create separate entries for individual line items.
+
+For each transaction:
+- type: "expense" for purchases/payments, "income" for deposits/refunds
+- amount: numeric amount (positive number)
+- currency: detect from image (default: ${ctx.user.preferredCurrency || "AZN"})
+- categoryName: best match from available categories
+- description: merchant name or meaningful description
+- date: UTC timestamp in milliseconds
+- confidence: "high"/"medium"/"low"
+
+Always return a transactions array, even for a single receipt (array with one item).`,
           },
           {
             role: "user",
@@ -319,7 +332,7 @@ Rules:
               },
               {
                 type: "text",
-                text: "Parse this receipt/transaction image into a structured financial transaction.",
+                text: "Parse all transactions from this image. Return each transaction separately if this is a bank/wallet screenshot, or a single transaction with the total if this is a store receipt.",
               },
             ],
           },
@@ -327,20 +340,35 @@ Rules:
         response_format: {
           type: "json_schema",
           json_schema: {
-            name: "parsed_receipt",
+            name: "parsed_transactions",
             strict: true,
             schema: {
               type: "object",
               properties: {
-                type: { type: "string", enum: ["income", "expense"], description: "Transaction type" },
-                amount: { type: "number", description: "Transaction amount" },
-                currency: { type: "string", description: "Currency code (AZN, USD, EUR, RUB, etc.)" },
-                categoryName: { type: "string", description: "Best matching category name from the available list" },
-                description: { type: "string", description: "Merchant name or short description" },
-                date: { type: "number", description: "Unix timestamp in milliseconds" },
-                confidence: { type: "string", enum: ["high", "medium", "low"], description: "Confidence level of the extraction" },
+                imageType: {
+                  type: "string",
+                  enum: ["bank_screenshot", "store_receipt", "other"],
+                  description: "Type of image detected",
+                },
+                transactions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: { type: "string", enum: ["income", "expense"] },
+                      amount: { type: "number" },
+                      currency: { type: "string" },
+                      categoryName: { type: "string" },
+                      description: { type: "string" },
+                      date: { type: "number", description: "UTC timestamp in milliseconds" },
+                      confidence: { type: "string", enum: ["high", "medium", "low"] },
+                    },
+                    required: ["type", "amount", "currency", "categoryName", "description", "date", "confidence"],
+                    additionalProperties: false,
+                  },
+                },
               },
-              required: ["type", "amount", "currency", "categoryName", "description", "date", "confidence"],
+              required: ["imageType", "transactions"],
               additionalProperties: false,
             },
           },
@@ -352,25 +380,108 @@ Rules:
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to parse receipt" });
       }
 
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(content) as {
+        imageType: "bank_screenshot" | "store_receipt" | "other";
+        transactions: Array<{
+          type: "income" | "expense";
+          amount: number;
+          currency: string;
+          categoryName: string;
+          description: string;
+          date: number;
+          confidence: "high" | "medium" | "low";
+        }>;
+      };
 
-      // Match category
-      const matchedCategory =
-        userCategories.find((c) => c.name.toLowerCase() === parsed.categoryName.toLowerCase()) ||
-        userCategories.find((c) => c.name.toLowerCase().includes(parsed.categoryName.toLowerCase())) ||
-        userCategories[userCategories.length - 1];
+      // Match categories for each transaction
+      const matchCategory = (categoryName: string) => {
+        return (
+          userCategories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase()) ||
+          userCategories.find((c) => c.name.toLowerCase().includes(categoryName.toLowerCase())) ||
+          userCategories[userCategories.length - 1]
+        );
+      };
+
+      const enrichedTransactions = parsed.transactions.map((tx) => {
+        const cat = matchCategory(tx.categoryName);
+        return {
+          ...tx,
+          categoryId: cat?.id,
+          categoryName: cat?.name || tx.categoryName,
+          categoryIcon: cat?.icon || "📦",
+        };
+      });
 
       return {
-        parsed: {
-          ...parsed,
-          categoryId: matchedCategory?.id,
-          categoryName: matchedCategory?.name || parsed.categoryName,
-          categoryIcon: matchedCategory?.icon || "📦",
-        },
+        imageType: parsed.imageType,
+        transactions: enrichedTransactions,
         imageUrl,
       };
     }),
+
+  // ─── Bulk Save Receipt Transactions (with duplicate detection) ─────
+  saveReceiptTransactions: protectedProcedure
+    .input(
+      z.object({
+        transactions: z.array(
+          z.object({
+            categoryId: z.number(),
+            type: z.enum(["income", "expense"]),
+            amount: z.string(),
+            currency: z.string().default("AZN"),
+            description: z.string().optional(),
+            date: z.number(),
+            isFamily: z.boolean().default(false),
+            familyGroupId: z.number().optional().nullable(),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Fetch recent transactions for duplicate detection (last 90 days)
+      const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+      const existing = await getTransactions(ctx.user.id, {
+        startDate: ninetyDaysAgo,
+        limit: 500,
+      });
+
+      const saved: number[] = [];
+      const skipped: number[] = [];
+
+      for (let i = 0; i < input.transactions.length; i++) {
+        const tx = input.transactions[i];
+        const txAmount = parseFloat(tx.amount);
+
+        // Duplicate detection: same amount + same description (case-insensitive) within ±24h window
+        const isDuplicate = existing.some((e) => {
+          const existingAmount = parseFloat(e.transaction.amount);
+          const amountMatch = Math.abs(existingAmount - txAmount) < 0.01;
+          const descMatch =
+            tx.description &&
+            e.transaction.description &&
+            e.transaction.description.toLowerCase().trim() === tx.description.toLowerCase().trim();
+          const dateMatch = Math.abs(e.transaction.date - tx.date) < 24 * 60 * 60 * 1000;
+          return amountMatch && descMatch && dateMatch;
+        });
+
+        if (isDuplicate) {
+          skipped.push(i);
+          continue;
+        }
+
+        await createTransaction({
+          ...tx,
+          userId: ctx.user.id,
+          familyGroupId: tx.familyGroupId ?? null,
+        });
+        saved.push(i);
+      }
+
+      return { saved: saved.length, skipped: skipped.length, skippedIndices: skipped };
+    }),
 });
+
+// ─── Reports Router ──────────────────────────────────────────────────
 
 // ─── Reports Router ──────────────────────────────────────────────────
 const reportsRouter = router({

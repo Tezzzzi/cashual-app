@@ -24,29 +24,30 @@ type Period = "week" | "month" | "year" | "all";
 
 function getPeriodRange(period: Period): { startDate?: number; endDate?: number } {
   if (period === "all") return {};
-  const now = new Date();
-  let start: Date;
+  // Always use current time when computing the range (not a stale memo)
+  const now = Date.now();
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  let startMs: number;
   switch (period) {
     case "week":
-      start = new Date(now);
-      start.setDate(start.getDate() - 7);
+      startMs = now - 7 * MS_PER_DAY;
       break;
     case "month":
-      start = new Date(now);
-      start.setMonth(start.getMonth() - 1);
+      startMs = now - 30 * MS_PER_DAY;
       break;
     case "year":
-      start = new Date(now);
-      start.setFullYear(start.getFullYear() - 1);
+      startMs = now - 365 * MS_PER_DAY;
       break;
+    default:
+      return {};
   }
-  return { startDate: start!.getTime(), endDate: now.getTime() };
+  return { startDate: startMs, endDate: now };
 }
 
 export default function Reports() {
   const { isAuthenticated } = useAuth();
-  const { t } = useLanguage();
-  const [period, setPeriod] = useState<Period>("month");
+  const { t, translateCategory } = useLanguage();
+  const [period, setPeriod] = useState<Period>("all");
   const [reportType, setReportType] = useState<"expense" | "income">("expense");
 
   const range = useMemo(() => getPeriodRange(period), [period]);
@@ -79,7 +80,7 @@ export default function Reports() {
   const pieData = useMemo(() => {
     if (!byCategory) return [];
     return byCategory.map((c) => ({
-      name: c.categoryName || "Другое",
+      name: translateCategory(c.categoryName || "Другое"),
       value: parseFloat(c.total || "0"),
       color: c.categoryColor || "#6366f1",
       icon: c.categoryIcon || "📦",

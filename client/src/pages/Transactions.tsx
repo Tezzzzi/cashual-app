@@ -35,9 +35,10 @@ import {
 } from "lucide-react";
 import TransactionForm from "@/components/TransactionForm";
 import { toast } from "sonner";
-
+import { useLanguage } from "@/contexts/LanguageContext";
 export default function Transactions() {
   const { isAuthenticated } = useAuth();
+  const { translateCategory } = useLanguage();
   const [editingTxn, setEditingTxn] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
@@ -106,7 +107,7 @@ export default function Transactions() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-medium truncate">
-                    {t.transaction.description || t.categoryName || "Транзакция"}
+                    {t.transaction.description || translateCategory(t.categoryName || "Другое") || "Транзакция"}
                   </p>
                   {t.transaction.isFamily && (
                     <span className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full shrink-0">
@@ -115,7 +116,7 @@ export default function Transactions() {
                   )}
                 </div>
                 <p className="text-[10px] text-muted-foreground">
-                  {t.categoryName} ·{" "}
+                  {translateCategory(t.categoryName || "")} ·{" "}
                   {new Date(t.transaction.date).toLocaleDateString("ru-RU")}
                 </p>
               </div>
