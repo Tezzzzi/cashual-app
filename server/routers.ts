@@ -18,7 +18,7 @@ import {
   getReportByCategory,
   createFamilyGroup,
   getFamilyGroupByInviteCode,
-  getUserFamilyGroups,
+  getFamilyGroupsByUserId,
   joinFamilyGroup,
   leaveFamilyGroup,
   getFamilyGroupMembers,
@@ -346,7 +346,7 @@ const reportsRouter = router({
 // ─── Family Router ───────────────────────────────────────────────────
 const familyRouter = router({
   myGroups: protectedProcedure.query(async ({ ctx }) => {
-    return getUserFamilyGroups(ctx.user.id);
+    return getFamilyGroupsByUserId(ctx.user.id);
   }),
 
   create: protectedProcedure

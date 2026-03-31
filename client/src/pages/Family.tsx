@@ -131,7 +131,7 @@ export default function Family() {
                   <div>
                     <p className="text-sm font-semibold">{g.group.name}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      {g.memberCount} участник(ов)
+                      Участники группы
                     </p>
                   </div>
                 </div>
@@ -185,10 +185,10 @@ export default function Family() {
                       className="flex items-center gap-2 px-2 py-1.5"
                     >
                       <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-xs">
-                        {(m.telegramFirstName || m.userName || "?")[0]}
+                        {(m.user.telegramFirstName || m.user.name || "?")[0]}
                       </div>
                       <span className="text-sm">
-                        {m.telegramFirstName || m.userName || "Участник"}
+                        {m.user.telegramFirstName || m.user.name || "Участник"}
                       </span>
                       {m.member.userId === g.group.ownerId && (
                         <Crown className="h-3.5 w-3.5 text-yellow-500" />

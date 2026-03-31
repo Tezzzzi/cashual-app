@@ -29,6 +29,10 @@ export async function getDb() {
 }
 
 // ─── Users ───────────────────────────────────────────────────────────
+
+/**
+ * Create or update a user. Handles all fields including Telegram-specific ones.
+ */
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) {
     throw new Error("User openId is required for upsert");
@@ -39,19 +43,25 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     return;
   }
   try {
+    // Build the full values object - include every defined field
     const values: InsertUser = { openId: user.openId };
     const updateSet: Record<string, unknown> = {};
 
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
+    // All nullable string fields
+    const stringFields = [
+      "name", "email", "loginMethod",
+      "telegramId", "telegramUsername", "telegramFirstName",
+      "telegramLastName", "telegramPhotoUrl",
+      "preferredLanguage", "preferredCurrency",
+    ] as const;
+
+    for (const field of stringFields) {
+      const value = user[field as keyof InsertUser];
+      if (value === undefined) continue;
       const normalized = value ?? null;
-      values[field] = normalized;
+      (values as any)[field] = normalized;
       updateSet[field] = normalized;
-    };
-    textFields.forEach(assignNullable);
+    }
 
     if (user.lastSignedIn !== undefined) {
       values.lastSignedIn = user.lastSignedIn;
@@ -70,7 +80,9 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (Object.keys(updateSet).length === 0) {
       updateSet.lastSignedIn = new Date();
     }
+
     await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+    console.log("[Database] Upserted user:", user.openId, "telegramId:", user.telegramId);
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -191,11 +203,9 @@ export async function getTransactions(
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else if (opts?.isFamily === false) {
-    // personal only
     conditions.push(eq(transactions.userId, userId));
     conditions.push(eq(transactions.isFamily, false));
   } else {
-    // default: user's personal transactions
     conditions.push(eq(transactions.userId, userId));
   }
 
@@ -204,7 +214,7 @@ export async function getTransactions(
   if (opts?.type) conditions.push(eq(transactions.type, opts.type));
   if (opts?.categoryId) conditions.push(eq(transactions.categoryId, opts.categoryId));
 
-  let query = db
+  return db
     .select({
       transaction: transactions,
       categoryName: categories.name,
@@ -219,8 +229,6 @@ export async function getTransactions(
     .orderBy(desc(transactions.date))
     .limit(opts?.limit ?? 100)
     .offset(opts?.offset ?? 0);
-
-  return query;
 }
 
 export async function createTransaction(data: InsertTransaction) {
@@ -318,26 +326,53 @@ export async function getReportByCategory(
       categoryName: categories.name,
       categoryIcon: categories.icon,
       categoryColor: categories.color,
-      type: transactions.type,
       total: sql<string>`CAST(SUM(${transactions.amount}) AS CHAR)`,
       count: sql<number>`COUNT(*)`,
     })
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(and(...conditions))
-    .groupBy(transactions.categoryId, categories.name, categories.icon, categories.color, transactions.type);
+    .groupBy(transactions.categoryId, categories.name, categories.icon, categories.color)
+    .orderBy(desc(sql`SUM(${transactions.amount})`));
 }
 
-// ─── Family Groups ───────────────────────────────────────────────────
+export async function getReportByPeriod(
+  userId: number,
+  opts?: { startDate?: number; endDate?: number; familyGroupId?: number }
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [];
+
+  if (opts?.familyGroupId) {
+    conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
+    conditions.push(eq(transactions.isFamily, true));
+  } else {
+    conditions.push(eq(transactions.userId, userId));
+    conditions.push(eq(transactions.isFamily, false));
+  }
+
+  if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
+  if (opts?.endDate) conditions.push(lte(transactions.date, opts.endDate));
+
+  return db
+    .select({
+      type: transactions.type,
+      month: sql<string>`DATE_FORMAT(FROM_UNIXTIME(${transactions.date}/1000), '%Y-%m')`,
+      total: sql<string>`CAST(SUM(${transactions.amount}) AS CHAR)`,
+    })
+    .from(transactions)
+    .where(and(...conditions))
+    .groupBy(transactions.type, sql`DATE_FORMAT(FROM_UNIXTIME(${transactions.date}/1000), '%Y-%m')`)
+    .orderBy(sql`DATE_FORMAT(FROM_UNIXTIME(${transactions.date}/1000), '%Y-%m')`);
+}
+
+// ─── Family Groups ────────────────────────────────────────────────────
 export async function createFamilyGroup(data: InsertFamilyGroup) {
   const db = await getDb();
   if (!db) return null;
   const [result] = await db.insert(familyGroups).values(data).$returningId();
-  // Add owner as member
-  await db.insert(familyGroupMembers).values({
-    familyGroupId: result.id,
-    userId: data.ownerId,
-  });
   return result;
 }
 
@@ -352,38 +387,35 @@ export async function getFamilyGroupByInviteCode(inviteCode: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getUserFamilyGroups(userId: number) {
+export async function getFamilyGroupsByUserId(userId: number) {
   const db = await getDb();
   if (!db) return [];
   return db
-    .select({
-      group: familyGroups,
-      memberCount: sql<number>`(SELECT COUNT(*) FROM familyGroupMembers WHERE familyGroupId = ${familyGroups.id})`,
-    })
+    .select({ group: familyGroups })
     .from(familyGroupMembers)
     .innerJoin(familyGroups, eq(familyGroupMembers.familyGroupId, familyGroups.id))
     .where(eq(familyGroupMembers.userId, userId));
 }
 
-export async function joinFamilyGroup(familyGroupId: number, userId: number) {
+export async function addFamilyGroupMember(data: InsertFamilyGroupMember) {
   const db = await getDb();
   if (!db) return;
-  // Check if already member
+  // Check if already a member
   const existing = await db
     .select()
     .from(familyGroupMembers)
     .where(
       and(
-        eq(familyGroupMembers.familyGroupId, familyGroupId),
-        eq(familyGroupMembers.userId, userId)
+        eq(familyGroupMembers.familyGroupId, data.familyGroupId),
+        eq(familyGroupMembers.userId, data.userId)
       )
     )
     .limit(1);
   if (existing.length > 0) return;
-  await db.insert(familyGroupMembers).values({ familyGroupId, userId });
+  await db.insert(familyGroupMembers).values(data);
 }
 
-export async function leaveFamilyGroup(familyGroupId: number, userId: number) {
+export async function removeFamilyGroupMember(familyGroupId: number, userId: number) {
   const db = await getDb();
   if (!db) return;
   await db
@@ -400,15 +432,17 @@ export async function getFamilyGroupMembers(familyGroupId: number) {
   const db = await getDb();
   if (!db) return [];
   return db
-    .select({
-      member: familyGroupMembers,
-      userName: users.name,
-      telegramFirstName: users.telegramFirstName,
-    })
+    .select({ member: familyGroupMembers, user: users })
     .from(familyGroupMembers)
     .innerJoin(users, eq(familyGroupMembers.userId, users.id))
     .where(eq(familyGroupMembers.familyGroupId, familyGroupId));
 }
+
+// Aliases for backward compatibility with routers.ts
+export async function joinFamilyGroup(familyGroupId: number, userId: number) {
+  return addFamilyGroupMember({ familyGroupId, userId });
+}
+export const leaveFamilyGroup = removeFamilyGroupMember;
 
 export async function isGroupMember(familyGroupId: number, userId: number): Promise<boolean> {
   const db = await getDb();

@@ -63,4 +63,5 @@
 - [ ] Provide final URL to user
 
 ## Bug Fixes
-- [ ] Fix infinite loading spinner in Telegram Mini App (auth flow stuck on "Загрузка...")
+- [x] Fix infinite loading spinner in Telegram Mini App (auth flow stuck on "Загрузка...")
+- [ ] Fix "Failed to create or retrieve user" error in Telegram auth flow
