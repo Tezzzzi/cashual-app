@@ -64,4 +64,5 @@
 
 ## Bug Fixes
 - [x] Fix infinite loading spinner in Telegram Mini App (auth flow stuck on "Загрузка...")
-- [ ] Fix "Failed to create or retrieve user" error in Telegram auth flow
+- [x] Fix "Failed to create or retrieve user" error in Telegram auth flow
+- [ ] Fix persistent "Authentication failed" error - Telegram initData validation failing on Railway

@@ -5,6 +5,7 @@
 import { useTelegramAuth } from "./useTelegramAuth";
 import { trpc } from "@/lib/trpc";
 import { useCallback } from "react";
+import { clearStoredToken } from "@/main";
 
 export function useAuth() {
   const telegramAuth = useTelegramAuth();
@@ -22,6 +23,8 @@ export function useAuth() {
     } catch {
       // ignore logout errors
     } finally {
+      // Clear the stored token from localStorage
+      clearStoredToken();
       utils.auth.me.setData(undefined, null);
       await utils.auth.me.invalidate();
     }

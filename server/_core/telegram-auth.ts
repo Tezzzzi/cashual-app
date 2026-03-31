@@ -1,6 +1,6 @@
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import type { Request } from "express";
-import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
@@ -21,13 +21,13 @@ export function validateTelegramInitData(initData: string): Record<string, strin
   try {
     const params = new URLSearchParams(initData);
     const hash = params.get("hash");
-    
+
     if (!hash) {
       console.warn("[Telegram] No hash in initData");
       return null;
     }
 
-    // Remove hash from params
+    // Remove hash from params before building check string
     params.delete("hash");
 
     // Sort params and create data check string
@@ -36,7 +36,7 @@ export function validateTelegramInitData(initData: string): Record<string, strin
       .map(([key, value]) => `${key}=${value}`)
       .join("\n");
 
-    // Create HMAC
+    // Create HMAC-SHA256 secret key from "WebAppData" + bot token
     const secretKey = crypto
       .createHmac("sha256", "WebAppData")
       .update(ENV.telegramBotToken)
@@ -48,11 +48,11 @@ export function validateTelegramInitData(initData: string): Record<string, strin
       .digest("hex");
 
     if (computedHash !== hash) {
-      console.warn("[Telegram] Invalid hash signature");
+      console.warn("[Telegram] Invalid hash. Expected:", computedHash, "Got:", hash);
       return null;
     }
 
-    // Convert URLSearchParams to object
+    // Convert URLSearchParams to plain object
     const data: Record<string, string> = {};
     params.forEach((value, key) => {
       data[key] = value;
@@ -66,16 +66,26 @@ export function validateTelegramInitData(initData: string): Record<string, strin
 }
 
 /**
- * Parse user data from Telegram initData
+ * Parse user data from validated Telegram initData
  */
 export function parseTelegramUser(data: Record<string, string>) {
   try {
     const userJson = data.user;
-    if (!userJson) return null;
+    if (!userJson) {
+      console.warn("[Telegram] No user field in initData");
+      return null;
+    }
 
     const user = JSON.parse(userJson);
+    const telegramId = String(user.id);
+
+    if (!telegramId || telegramId === "undefined") {
+      console.warn("[Telegram] user.id is missing:", user);
+      return null;
+    }
+
     return {
-      telegramId: String(user.id),
+      telegramId,
       telegramUsername: user.username || null,
       telegramFirstName: user.first_name || null,
       telegramLastName: user.last_name || null,
@@ -88,48 +98,39 @@ export function parseTelegramUser(data: Record<string, string>) {
 }
 
 /**
- * Create a session token for a Telegram user
+ * Create a session token using jsonwebtoken (Node.js native crypto, no Web Crypto needed)
  */
-export async function createSessionToken(
+export function createSessionToken(
   userId: number,
   telegramId: string,
   options: { expiresInMs?: number } = {}
-): Promise<string> {
-  const issuedAt = Date.now();
-  const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
-  const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
-  const secretKey = new TextEncoder().encode(ENV.cookieSecret);
+): string {
+  const expiresInSeconds = Math.floor((options.expiresInMs ?? ONE_YEAR_MS) / 1000);
+  const secret = ENV.cookieSecret;
 
-  return new SignJWT({
-    userId,
-    telegramId,
-  })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .setExpirationTime(expirationSeconds)
-    .sign(secretKey);
+  return jwt.sign(
+    { userId, telegramId } satisfies SessionPayload,
+    secret,
+    { expiresIn: expiresInSeconds, algorithm: "HS256" }
+  );
 }
 
 /**
  * Verify and decode a session token
  */
-export async function verifySessionToken(
-  token: string | null | undefined
-): Promise<SessionPayload | null> {
+export function verifySessionToken(token: string | null | undefined): SessionPayload | null {
   if (!token) {
-    console.warn("[Auth] Missing session token");
     return null;
   }
 
   try {
-    const secretKey = new TextEncoder().encode(ENV.cookieSecret);
-    const { payload } = await jwtVerify(token, secretKey, {
-      algorithms: ["HS256"],
-    });
+    const secret = ENV.cookieSecret;
+    const payload = jwt.verify(token, secret, { algorithms: ["HS256"] }) as Record<string, unknown>;
 
-    const { userId, telegramId } = payload as Record<string, unknown>;
+    const { userId, telegramId } = payload;
 
     if (typeof userId !== "number" || typeof telegramId !== "string") {
-      console.warn("[Auth] Invalid session payload");
+      console.warn("[Auth] Invalid session payload types:", typeof userId, typeof telegramId);
       return null;
     }
 
@@ -145,21 +146,27 @@ export async function verifySessionToken(
  */
 export async function authenticateRequest(req: Request): Promise<User | null> {
   try {
-    // Parse cookies
+    // Parse cookies manually
     const cookieHeader = req.headers.cookie;
     const cookies = new Map<string, string>();
-    
+
     if (cookieHeader) {
       cookieHeader.split(";").forEach((cookie) => {
-        const [name, value] = cookie.trim().split("=");
-        if (name && value) {
-          cookies.set(name, decodeURIComponent(value));
+        const eqIdx = cookie.indexOf("=");
+        if (eqIdx > 0) {
+          const name = cookie.substring(0, eqIdx).trim();
+          const value = cookie.substring(eqIdx + 1).trim();
+          try {
+            cookies.set(name, decodeURIComponent(value));
+          } catch {
+            cookies.set(name, value);
+          }
         }
       });
     }
 
     const sessionToken = cookies.get(COOKIE_NAME);
-    const session = await verifySessionToken(sessionToken);
+    const session = verifySessionToken(sessionToken);
 
     if (!session) {
       return null;
@@ -169,12 +176,6 @@ export async function authenticateRequest(req: Request): Promise<User | null> {
     if (!user) {
       return null;
     }
-
-    // Update last signed in timestamp
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: new Date(),
-    })
 
     return user;
   } catch (error) {

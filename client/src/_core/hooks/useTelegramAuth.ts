@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { setStoredToken, getStoredToken, clearStoredToken } from "@/main";
 
 type AuthState = "idle" | "authenticating" | "authenticated" | "error";
 
@@ -7,14 +8,17 @@ export function useTelegramAuth() {
   const [authState, setAuthState] = useState<AuthState>("idle");
   const [error, setError] = useState<string | null>(null);
   const authAttempted = useRef(false);
-
   const utils = trpc.useUtils();
+
+  // Check if we already have a stored token
+  const hasStoredToken = Boolean(getStoredToken());
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
-    // Only auto-fetch if we might already have a session cookie
-    staleTime: 30_000,
+    staleTime: 60_000,
+    // Only auto-fetch if we have a stored token
+    enabled: hasStoredToken || authState === "authenticated",
   });
 
   useEffect(() => {
@@ -23,64 +27,72 @@ export function useTelegramAuth() {
     authAttempted.current = true;
 
     const authenticate = async () => {
+      // If we already have a stored token, check if it's still valid
+      const existingToken = getStoredToken();
+      if (existingToken) {
+        try {
+          const existingUser = await utils.auth.me.fetch();
+          if (existingUser) {
+            console.log("[Telegram Auth] Using existing valid token");
+            setAuthState("authenticated");
+            return;
+          }
+        } catch {
+          // Token expired or invalid, clear it and re-auth
+          console.warn("[Telegram Auth] Existing token invalid, re-authenticating");
+          clearStoredToken();
+        }
+      }
+
       setAuthState("authenticating");
 
-      // Get Telegram initData - wait briefly for Telegram SDK to initialize
+      // Get Telegram initData
       const getInitData = (): string => {
         return window.Telegram?.WebApp?.initData ?? "";
       };
 
       let initData = getInitData();
 
-      // If initData is empty, wait up to 500ms for Telegram SDK to load
+      // Wait briefly for Telegram SDK to initialize if needed
       if (!initData) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 500));
+        await new Promise<void>((resolve) => setTimeout(resolve, 800));
         initData = getInitData();
       }
 
       // If still no initData, we're running outside Telegram
-      // Try to use existing session cookie first
       if (!initData) {
-        console.warn("[Telegram Auth] No initData - running outside Telegram or SDK not loaded");
-        // Check if we have an existing valid session
-        try {
-          const existingUser = await utils.auth.me.fetch();
-          if (existingUser) {
-            setAuthState("authenticated");
-            return;
-          }
-        } catch {
-          // No existing session
-        }
-        // Allow app to load in "guest" mode for browser testing
+        console.warn("[Telegram Auth] No initData - running outside Telegram");
         setAuthState("error");
-        setError("Открой приложение через Telegram бота @cashua_appl_bot");
+        setError("Откройте приложение через Telegram бота @cashua_appl_bot");
         return;
       }
+
+      console.log("[Telegram Auth] Authenticating with initData length:", initData.length);
 
       try {
         const response = await fetch("/api/telegram/auth", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
           body: JSON.stringify({ initData }),
         });
 
+        const responseData = await response.json();
+
         if (!response.ok) {
-          let errorMsg = "Ошибка авторизации";
-          try {
-            const errorData = await response.json();
-            errorMsg = errorData.error || errorMsg;
-          } catch {
-            // ignore JSON parse error
-          }
-          console.error("[Telegram Auth] Failed:", errorMsg);
+          const errorMsg = responseData.error || "Ошибка авторизации";
+          console.error("[Telegram Auth] Failed:", errorMsg, responseData.details);
           setError(errorMsg);
           setAuthState("error");
           return;
         }
 
-        // Invalidate and refetch user data after successful auth
+        // Store the JWT token in localStorage
+        if (responseData.token) {
+          setStoredToken(responseData.token);
+          console.log("[Telegram Auth] Token stored, user:", responseData.user?.name);
+        }
+
+        // Invalidate and refetch user data with the new token
         await utils.auth.me.invalidate();
         setAuthState("authenticated");
       } catch (err) {
@@ -92,9 +104,13 @@ export function useTelegramAuth() {
 
     authenticate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty deps - run once only
+  }, []);
 
-  const isLoading = authState === "idle" || authState === "authenticating" || meQuery.isLoading;
+  const isLoading =
+    authState === "idle" ||
+    authState === "authenticating" ||
+    (authState === "authenticated" && meQuery.isLoading);
+
   const isAuthenticated = authState === "authenticated" && Boolean(meQuery.data);
 
   return {
