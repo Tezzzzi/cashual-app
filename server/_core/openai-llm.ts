@@ -30,38 +30,71 @@ export type InvokeResult = {
 };
 
 /**
- * Call OpenAI GPT API directly
+ * Get the LLM API URL - prefer Forge API, fall back to OpenAI
+ */
+function getLLMApiUrl(): string {
+  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
+    const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
+    return `${baseUrl}v1/chat/completions`;
+  }
+  return "https://api.openai.com/v1/chat/completions";
+}
+
+/**
+ * Get the API key - prefer Forge API key, fall back to OpenAI key
+ */
+function getLLMApiKey(): string | null {
+  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
+    return ENV.forgeApiKey;
+  }
+  if (ENV.openaiApiKey) {
+    return ENV.openaiApiKey;
+  }
+  return null;
+}
+
+/**
+ * Call LLM API - uses Forge API if available, falls back to OpenAI
  */
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  if (!ENV.openaiApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+  const apiKey = getLLMApiKey();
+  const apiUrl = getLLMApiUrl();
+
+  if (!apiKey) {
+    console.error("[LLM] No API credentials available. forgeApiUrl:", !!ENV.forgeApiUrl, "forgeApiKey:", !!ENV.forgeApiKey, "openaiApiKey:", !!ENV.openaiApiKey);
+    throw new Error("No LLM API credentials configured (neither BUILT_IN_FORGE_API_KEY nor OPENAI_API_KEY)");
   }
 
+  console.log(`[LLM] Calling ${apiUrl}`);
+
   const payload: Record<string, unknown> = {
-    model: "gpt-4o-mini",
+    model: "gemini-2.5-flash",
     messages: params.messages,
-    temperature: 0.7,
+    max_tokens: 4096,
   };
 
   if (params.response_format) {
     payload.response_format = params.response_format;
   }
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${ENV.openaiApiKey}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error(`[LLM] API error: ${response.status} ${response.statusText} – ${errorText}`);
     throw new Error(
-      `OpenAI API error: ${response.status} ${response.statusText} – ${errorText}`
+      `LLM API error: ${response.status} ${response.statusText} – ${errorText}`
     );
   }
 
-  return (await response.json()) as InvokeResult;
+  const result = (await response.json()) as InvokeResult;
+  console.log(`[LLM] Success, response length: ${result.choices?.[0]?.message?.content?.length || 0}`);
+  return result;
 }

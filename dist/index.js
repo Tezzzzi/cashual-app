@@ -1,6 +1,113 @@
+var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// vite.config.ts
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import path2 from "node:path";
+import { defineConfig } from "vite";
+var vite_config_default;
+var init_vite_config = __esm({
+  "vite.config.ts"() {
+    "use strict";
+    vite_config_default = defineConfig({
+      plugins: [react(), tailwindcss()],
+      resolve: {
+        alias: {
+          "@": path2.resolve(import.meta.dirname, "client", "src"),
+          "@shared": path2.resolve(import.meta.dirname, "shared"),
+          "@assets": path2.resolve(import.meta.dirname, "attached_assets")
+        }
+      },
+      envDir: path2.resolve(import.meta.dirname),
+      root: path2.resolve(import.meta.dirname, "client"),
+      publicDir: path2.resolve(import.meta.dirname, "client", "public"),
+      build: {
+        outDir: path2.resolve(import.meta.dirname, "dist/public"),
+        emptyOutDir: true
+      },
+      server: {
+        host: true
+      }
+    });
+  }
+});
+
+// server/_core/vite.ts
+var vite_exports = {};
+__export(vite_exports, {
+  serveStatic: () => serveStatic2,
+  setupVite: () => setupVite
+});
+import express2 from "express";
+import fs2 from "fs";
+import { nanoid as nanoid2 } from "nanoid";
+import path3 from "path";
+import { createServer as createViteServer } from "vite";
+async function setupVite(app, server) {
+  const serverOptions = {
+    middlewareMode: true,
+    hmr: { server },
+    allowedHosts: true
+  };
+  const vite = await createViteServer({
+    ...vite_config_default,
+    configFile: false,
+    server: serverOptions,
+    appType: "custom"
+  });
+  app.use(vite.middlewares);
+  app.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+    try {
+      const clientTemplate = path3.resolve(
+        import.meta.dirname,
+        "../..",
+        "client",
+        "index.html"
+      );
+      let template = await fs2.promises.readFile(clientTemplate, "utf-8");
+      template = template.replace(
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid2()}"`
+      );
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+    } catch (e) {
+      vite.ssrFixStacktrace(e);
+      next(e);
+    }
+  });
+}
+function serveStatic2(app) {
+  const distPath = process.env.NODE_ENV === "development" ? path3.resolve(import.meta.dirname, "../..", "dist", "public") : path3.resolve(import.meta.dirname, "public");
+  if (!fs2.existsSync(distPath)) {
+    console.error(
+      `Could not find the build directory: ${distPath}, make sure to build the client first`
+    );
+  }
+  app.use(express2.static(distPath));
+  app.use("*", (_req, res) => {
+    res.sendFile(path3.resolve(distPath, "index.html"));
+  });
+}
+var init_vite = __esm({
+  "server/_core/vite.ts"() {
+    "use strict";
+    init_vite_config();
+  }
+});
+
 // server/_core/index.ts
 import "dotenv/config";
-import express2 from "express";
+import express3 from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -722,38 +829,47 @@ import { nanoid } from "nanoid";
 // server/_core/openai-whisper.ts
 async function transcribeAudio(options) {
   try {
-    if (!ENV.openaiApiKey) {
+    const apiUrl = getTranscriptionApiUrl();
+    const apiKey = getTranscriptionApiKey();
+    if (!apiUrl || !apiKey) {
+      console.error("[Whisper] No API credentials available. forgeApiUrl:", !!ENV.forgeApiUrl, "forgeApiKey:", !!ENV.forgeApiKey, "openaiApiKey:", !!ENV.openaiApiKey);
       return {
-        error: "OpenAI API key is not configured",
+        error: "Transcription service is not configured",
         code: "SERVICE_ERROR",
-        details: "OPENAI_API_KEY is not set"
+        details: "Neither BUILT_IN_FORGE_API_URL nor OPENAI_API_KEY is set"
       };
     }
     const sizeMB = options.audioBuffer.length / (1024 * 1024);
-    if (sizeMB > 25) {
+    if (sizeMB > 16) {
       return {
         error: "Audio file exceeds maximum size limit",
         code: "FILE_TOO_LARGE",
-        details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 25MB`
+        details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB`
       };
     }
+    console.log(`[Whisper] Transcribing ${sizeMB.toFixed(2)}MB audio via ${apiUrl}`);
     const formData = new FormData();
     const mimeType = options.mimeType || "audio/webm";
+    const ext = getFileExtension(mimeType);
     const audioBlob = new Blob([new Uint8Array(options.audioBuffer)], { type: mimeType });
-    formData.append("file", audioBlob, "audio.webm");
+    formData.append("file", audioBlob, `audio.${ext}`);
     formData.append("model", "whisper-1");
-    formData.append("language", options.language || "ru");
+    if (options.language) {
+      formData.append("language", options.language);
+    }
     const prompt = options.language === "ru" ? "\u042D\u0442\u043E \u0444\u0438\u043D\u0430\u043D\u0441\u043E\u0432\u0430\u044F \u0442\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u044F. \u0420\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u0439 \u0441\u0443\u043C\u043C\u0443, \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E \u0438 \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u0435." : options.language === "az" ? "Bu maliyy\u0259 \u0259m\u0259liyyat\u0131d\u0131r. M\u0259bl\u0259\u011F, kateqoriya v\u0259 t\u0259sviri tan\u0131." : "This is a financial transaction. Recognize the amount, category, and description.";
     formData.append("prompt", prompt);
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${ENV.openaiApiKey}`
+        Authorization: `Bearer ${apiKey}`,
+        "Accept-Encoding": "identity"
       },
       body: formData
     });
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
+      console.error(`[Whisper] API error: ${response.status} ${response.statusText} - ${errorText}`);
       return {
         error: "Transcription service request failed",
         code: "TRANSCRIPTION_FAILED",
@@ -761,12 +877,14 @@ async function transcribeAudio(options) {
       };
     }
     const result = await response.json();
-    const detectedLanguage = options.language || "ru";
+    console.log(`[Whisper] Transcription successful: "${result.text.substring(0, 50)}..."`);
+    const detectedLanguage = result.language || options.language || "ru";
     return {
       text: result.text,
       language: detectedLanguage
     };
   } catch (error) {
+    console.error("[Whisper] Unexpected error:", error);
     return {
       error: "Voice transcription failed",
       code: "SERVICE_ERROR",
@@ -774,35 +892,90 @@ async function transcribeAudio(options) {
     };
   }
 }
+function getTranscriptionApiUrl() {
+  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
+    const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
+    return `${baseUrl}v1/audio/transcriptions`;
+  }
+  if (ENV.openaiApiKey) {
+    return "https://api.openai.com/v1/audio/transcriptions";
+  }
+  return null;
+}
+function getTranscriptionApiKey() {
+  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
+    return ENV.forgeApiKey;
+  }
+  if (ENV.openaiApiKey) {
+    return ENV.openaiApiKey;
+  }
+  return null;
+}
+function getFileExtension(mimeType) {
+  const mimeToExt = {
+    "audio/webm": "webm",
+    "audio/mp3": "mp3",
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/wave": "wav",
+    "audio/ogg": "ogg",
+    "audio/m4a": "m4a",
+    "audio/mp4": "m4a"
+  };
+  return mimeToExt[mimeType] || "webm";
+}
 
 // server/_core/openai-llm.ts
-async function invokeLLM(params) {
-  if (!ENV.openaiApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+function getLLMApiUrl() {
+  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
+    const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
+    return `${baseUrl}v1/chat/completions`;
   }
+  return "https://api.openai.com/v1/chat/completions";
+}
+function getLLMApiKey() {
+  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
+    return ENV.forgeApiKey;
+  }
+  if (ENV.openaiApiKey) {
+    return ENV.openaiApiKey;
+  }
+  return null;
+}
+async function invokeLLM(params) {
+  const apiKey = getLLMApiKey();
+  const apiUrl = getLLMApiUrl();
+  if (!apiKey) {
+    console.error("[LLM] No API credentials available. forgeApiUrl:", !!ENV.forgeApiUrl, "forgeApiKey:", !!ENV.forgeApiKey, "openaiApiKey:", !!ENV.openaiApiKey);
+    throw new Error("No LLM API credentials configured (neither BUILT_IN_FORGE_API_KEY nor OPENAI_API_KEY)");
+  }
+  console.log(`[LLM] Calling ${apiUrl}`);
   const payload = {
-    model: "gpt-4o-mini",
+    model: "gemini-2.5-flash",
     messages: params.messages,
-    temperature: 0.7
+    max_tokens: 4096
   };
   if (params.response_format) {
     payload.response_format = params.response_format;
   }
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${ENV.openaiApiKey}`
+      Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify(payload)
   });
   if (!response.ok) {
     const errorText = await response.text();
+    console.error(`[LLM] API error: ${response.status} ${response.statusText} \u2013 ${errorText}`);
     throw new Error(
-      `OpenAI API error: ${response.status} ${response.statusText} \u2013 ${errorText}`
+      `LLM API error: ${response.status} ${response.statusText} \u2013 ${errorText}`
     );
   }
-  return await response.json();
+  const result = await response.json();
+  console.log(`[LLM] Success, response length: ${result.choices?.[0]?.message?.content?.length || 0}`);
+  return result;
 }
 
 // server/routers.ts
@@ -1211,10 +1384,10 @@ async function findAvailablePort(startPort = 3e3) {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 async function startServer() {
-  const app = express2();
+  const app = express3();
   const server = createServer(app);
-  app.use(express2.json({ limit: "50mb" }));
-  app.use(express2.urlencoded({ limit: "50mb", extended: true }));
+  app.use(express3.json({ limit: "50mb" }));
+  app.use(express3.urlencoded({ limit: "50mb", extended: true }));
   registerTelegramRoutes(app);
   app.use(
     "/api/trpc",
@@ -1226,10 +1399,7 @@ async function startServer() {
   if (process.env.NODE_ENV !== "development") {
     serveStatic(app);
   } else {
-    const viteMod = await import(
-      /* @vite-ignore */
-      "./vite.js"
-    );
+    const viteMod = await Promise.resolve().then(() => (init_vite(), vite_exports));
     await viteMod.setupVite(app, server);
   }
   const preferredPort = parseInt(process.env.PORT || "3000");
