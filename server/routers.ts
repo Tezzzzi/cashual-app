@@ -352,6 +352,14 @@ const familyRouter = router({
   create: protectedProcedure
     .input(z.object({ name: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
+      // Enforce one-family-per-user: check if user already belongs to any group
+      const existingGroups = await getFamilyGroupsByUserId(ctx.user.id);
+      if (existingGroups.length > 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Вы уже состоите в семейной группе. Покиньте её перед созданием новой.",
+        });
+      }
       const inviteCode = nanoid(8).toUpperCase();
       const result = await createFamilyGroup({
         name: input.name,

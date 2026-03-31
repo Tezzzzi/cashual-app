@@ -1,113 +1,6 @@
-var __defProp = Object.defineProperty;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __esm = (fn, res) => function __init() {
-  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
-};
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
-};
-
-// vite.config.ts
-import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
-import path2 from "node:path";
-import { defineConfig } from "vite";
-var vite_config_default;
-var init_vite_config = __esm({
-  "vite.config.ts"() {
-    "use strict";
-    vite_config_default = defineConfig({
-      plugins: [react(), tailwindcss()],
-      resolve: {
-        alias: {
-          "@": path2.resolve(import.meta.dirname, "client", "src"),
-          "@shared": path2.resolve(import.meta.dirname, "shared"),
-          "@assets": path2.resolve(import.meta.dirname, "attached_assets")
-        }
-      },
-      envDir: path2.resolve(import.meta.dirname),
-      root: path2.resolve(import.meta.dirname, "client"),
-      publicDir: path2.resolve(import.meta.dirname, "client", "public"),
-      build: {
-        outDir: path2.resolve(import.meta.dirname, "dist/public"),
-        emptyOutDir: true
-      },
-      server: {
-        host: true
-      }
-    });
-  }
-});
-
-// server/_core/vite.ts
-var vite_exports = {};
-__export(vite_exports, {
-  serveStatic: () => serveStatic2,
-  setupVite: () => setupVite
-});
-import express2 from "express";
-import fs2 from "fs";
-import { nanoid as nanoid2 } from "nanoid";
-import path3 from "path";
-import { createServer as createViteServer } from "vite";
-async function setupVite(app, server) {
-  const serverOptions = {
-    middlewareMode: true,
-    hmr: { server },
-    allowedHosts: true
-  };
-  const vite = await createViteServer({
-    ...vite_config_default,
-    configFile: false,
-    server: serverOptions,
-    appType: "custom"
-  });
-  app.use(vite.middlewares);
-  app.use("*", async (req, res, next) => {
-    const url = req.originalUrl;
-    try {
-      const clientTemplate = path3.resolve(
-        import.meta.dirname,
-        "../..",
-        "client",
-        "index.html"
-      );
-      let template = await fs2.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid2()}"`
-      );
-      const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
-    } catch (e) {
-      vite.ssrFixStacktrace(e);
-      next(e);
-    }
-  });
-}
-function serveStatic2(app) {
-  const distPath = process.env.NODE_ENV === "development" ? path3.resolve(import.meta.dirname, "../..", "dist", "public") : path3.resolve(import.meta.dirname, "public");
-  if (!fs2.existsSync(distPath)) {
-    console.error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`
-    );
-  }
-  app.use(express2.static(distPath));
-  app.use("*", (_req, res) => {
-    res.sendFile(path3.resolve(distPath, "index.html"));
-  });
-}
-var init_vite = __esm({
-  "server/_core/vite.ts"() {
-    "use strict";
-    init_vite_config();
-  }
-});
-
 // server/_core/index.ts
 import "dotenv/config";
-import express3 from "express";
+import express2 from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -1233,6 +1126,13 @@ var familyRouter = router({
     return getFamilyGroupsByUserId(ctx.user.id);
   }),
   create: protectedProcedure.input(z2.object({ name: z2.string().min(1).max(128) })).mutation(async ({ ctx, input }) => {
+    const existingGroups = await getFamilyGroupsByUserId(ctx.user.id);
+    if (existingGroups.length > 0) {
+      throw new TRPCError3({
+        code: "BAD_REQUEST",
+        message: "\u0412\u044B \u0443\u0436\u0435 \u0441\u043E\u0441\u0442\u043E\u0438\u0442\u0435 \u0432 \u0441\u0435\u043C\u0435\u0439\u043D\u043E\u0439 \u0433\u0440\u0443\u043F\u043F\u0435. \u041F\u043E\u043A\u0438\u043D\u044C\u0442\u0435 \u0435\u0451 \u043F\u0435\u0440\u0435\u0434 \u0441\u043E\u0437\u0434\u0430\u043D\u0438\u0435\u043C \u043D\u043E\u0432\u043E\u0439."
+      });
+    }
     const inviteCode = nanoid(8).toUpperCase();
     const result = await createFamilyGroup({
       name: input.name,
@@ -1384,10 +1284,10 @@ async function findAvailablePort(startPort = 3e3) {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 async function startServer() {
-  const app = express3();
+  const app = express2();
   const server = createServer(app);
-  app.use(express3.json({ limit: "50mb" }));
-  app.use(express3.urlencoded({ limit: "50mb", extended: true }));
+  app.use(express2.json({ limit: "50mb" }));
+  app.use(express2.urlencoded({ limit: "50mb", extended: true }));
   registerTelegramRoutes(app);
   app.use(
     "/api/trpc",
@@ -1399,7 +1299,10 @@ async function startServer() {
   if (process.env.NODE_ENV !== "development") {
     serveStatic(app);
   } else {
-    const viteMod = await Promise.resolve().then(() => (init_vite(), vite_exports));
+    const viteMod = await import(
+      /* @vite-ignore */
+      "./vite.js"
+    );
     await viteMod.setupVite(app, server);
   }
   const preferredPort = parseInt(process.env.PORT || "3000");

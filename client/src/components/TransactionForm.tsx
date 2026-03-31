@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,7 +55,9 @@ export default function TransactionForm({
     const d = initialData?.date ? new Date(initialData.date) : new Date();
     return d.toISOString().split("T")[0];
   });
-  const [isFamily, setIsFamily] = useState(initialData?.isFamily || false);
+  const [isFamily, setIsFamily] = useState(
+    initialData?.isFamily !== undefined ? initialData.isFamily : false
+  );
   const [familyGroupId, setFamilyGroupId] = useState<string>(
     initialData?.familyGroupId?.toString() || ""
   );
@@ -63,6 +65,21 @@ export default function TransactionForm({
   const { data: categories } = trpc.categories.list.useQuery();
   const { data: familyGroups } = trpc.family.myGroups.useQuery();
   const utils = trpc.useUtils();
+
+  // Once familyGroups loads, default to family budget if user has a group
+  // and no explicit initialData override was provided
+  useEffect(() => {
+    if (!familyGroups || familyGroups.length === 0) return;
+    const firstGroup = familyGroups[0].group;
+    // Only set defaults if not already set from initialData
+    if (initialData?.isFamily === undefined) {
+      setIsFamily(true);
+    }
+    if (!initialData?.familyGroupId && !familyGroupId) {
+      setFamilyGroupId(firstGroup.id.toString());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyGroups]);
 
   const createMutation = trpc.transactions.create.useMutation({
     onSuccess: () => {

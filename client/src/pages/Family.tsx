@@ -43,6 +43,9 @@ export default function Family() {
     enabled: isAuthenticated,
   });
 
+  // User can only be in one family group at a time
+  const hasGroup = groups && groups.length > 0;
+
   const { data: members } = trpc.family.members.useQuery(
     { familyGroupId: selectedGroupId! },
     { enabled: !!selectedGroupId }
@@ -99,18 +102,22 @@ export default function Family() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Семейный режим</h1>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowJoin(true)}
-          >
-            <UserPlus className="h-3.5 w-3.5 mr-1" />
-            Войти
-          </Button>
-          <Button size="sm" onClick={() => setShowCreate(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            Создать
-          </Button>
+          {!hasGroup && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowJoin(true)}
+            >
+              <UserPlus className="h-3.5 w-3.5 mr-1" />
+              Войти
+            </Button>
+          )}
+          {!hasGroup && (
+            <Button size="sm" onClick={() => setShowCreate(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Создать
+            </Button>
+          )}
         </div>
       </div>
 

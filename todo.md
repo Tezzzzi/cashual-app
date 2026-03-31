@@ -66,3 +66,7 @@
 - [x] Fix infinite loading spinner in Telegram Mini App (auth flow stuck on "Загрузка...")
 - [x] Fix "Failed to create or retrieve user" error in Telegram auth flow
 - [ ] Fix persistent "Authentication failed" error - Telegram initData validation failing on Railway
+
+## New Feature Requests
+- [ ] Limit users to one family budget (cannot create if already in a group)
+- [ ] Default all transactions to family budget when user has a family group
