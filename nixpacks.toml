@@ -1,0 +1,2 @@
+[phases.build]
+cmds = ["rm -rf node_modules/.pnpm/jose* node_modules/jose && pnpm install --frozen-lockfile && vite build && esbuild server/_core/index.ts --platform=node --packages=external --external:./vite --external:./vite.js --external:../../vite.config --bundle --format=esm --outdir=dist"]
