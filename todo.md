@@ -86,3 +86,6 @@
 - [x] Fix reports time filter broken (7d/30d/etc show zero data, only "All" works)
 - [x] Fix category names not translating when language is switched
 - [x] Fix receipt scanner only saves first transaction (need multi-transaction + duplicate detection)
+
+## Bug Fixes (Round 4)
+- [ ] Fix reports time filter ROOT CAUSE (7d/30d return empty for real user — investigate actual dates in production DB)

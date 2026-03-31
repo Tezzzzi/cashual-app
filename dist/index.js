@@ -338,6 +338,12 @@ async function seedPresetCategories() {
   ];
   await db.insert(categories).values(presets);
 }
+function normalizeTimestampMs(ts) {
+  if (ts > 0 && ts < 1e11) {
+    return ts * 1e3;
+  }
+  return ts;
+}
 async function getTransactions(userId, opts) {
   const db = await getDb();
   if (!db) return [];
@@ -366,13 +372,15 @@ async function getTransactions(userId, opts) {
 async function createTransaction(data) {
   const db = await getDb();
   if (!db) return null;
-  const [result] = await db.insert(transactions).values(data).$returningId();
+  const normalizedData = { ...data, date: normalizeTimestampMs(data.date) };
+  const [result] = await db.insert(transactions).values(normalizedData).$returningId();
   return result;
 }
 async function updateTransaction(id, userId, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(transactions).set(data).where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+  const normalizedData = data.date ? { ...data, date: normalizeTimestampMs(data.date) } : data;
+  await db.update(transactions).set(normalizedData).where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
 }
 async function deleteTransaction(id, userId) {
   const db = await getDb();

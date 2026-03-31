@@ -180,6 +180,22 @@ export async function seedPresetCategories() {
   await db.insert(categories).values(presets);
 }
 
+// ─── Timestamp Normalization ────────────────────────────────────────
+/**
+ * Ensures a timestamp is in milliseconds.
+ * If the value looks like seconds (< 1e12), multiply by 1000.
+ * This handles cases where the LLM returns Unix seconds instead of milliseconds.
+ */
+export function normalizeTimestampMs(ts: number): number {
+  // Timestamps before year ~2001 in ms would be < 1e12
+  // Current seconds timestamps are ~1.77e9, current ms timestamps are ~1.77e12
+  if (ts > 0 && ts < 1e11) {
+    // Definitely seconds (before year 5138 in seconds)
+    return ts * 1000;
+  }
+  return ts;
+}
+
 // ─── Transactions ────────────────────────────────────────────────────
 export async function getTransactions(
   userId: number,
@@ -234,7 +250,9 @@ export async function getTransactions(
 export async function createTransaction(data: InsertTransaction) {
   const db = await getDb();
   if (!db) return null;
-  const [result] = await db.insert(transactions).values(data).$returningId();
+  // Normalize date to milliseconds before storing
+  const normalizedData = { ...data, date: normalizeTimestampMs(data.date) };
+  const [result] = await db.insert(transactions).values(normalizedData).$returningId();
   return result;
 }
 
@@ -245,9 +263,11 @@ export async function updateTransaction(
 ) {
   const db = await getDb();
   if (!db) return;
+  // Normalize date to milliseconds if present
+  const normalizedData = data.date ? { ...data, date: normalizeTimestampMs(data.date) } : data;
   await db
     .update(transactions)
-    .set(data)
+    .set(normalizedData)
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
 }
 
@@ -369,6 +389,25 @@ export async function getReportByPeriod(
     .where(and(...conditions))
     .groupBy(transactions.type, sql`DATE_FORMAT(FROM_UNIXTIME(${transactions.date}/1000), '%Y-%m')`)
     .orderBy(sql`DATE_FORMAT(FROM_UNIXTIME(${transactions.date}/1000), '%Y-%m')`);
+}
+
+/**
+ * Fix any existing transactions that have dates stored in seconds instead of milliseconds.
+ * This is a one-time migration that runs on startup.
+ */
+export async function fixTransactionDates() {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    // Any date value less than 1e11 is definitely in seconds (before year 5138 in seconds)
+    // Multiply by 1000 to convert to milliseconds
+    const result = await db.execute(
+      sql`UPDATE transactions SET date = date * 1000 WHERE date > 0 AND date < 100000000000`
+    );
+    console.log("[Database] Fixed transaction dates (seconds → milliseconds)");
+  } catch (error) {
+    console.error("[Database] Failed to fix transaction dates:", error);
+  }
 }
 
 // ─── Family Groups ────────────────────────────────────────────────────
