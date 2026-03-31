@@ -18,6 +18,9 @@ COPY . .
 # Build the application
 RUN pnpm build
 
+# Set production environment
+ENV NODE_ENV=production
+
 # Expose port
 EXPOSE 3000
 
