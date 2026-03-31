@@ -61,3 +61,6 @@
 - [ ] Set up Telegram webhook
 - [ ] Verify deployment is working
 - [ ] Provide final URL to user
+
+## Bug Fixes
+- [ ] Fix infinite loading spinner in Telegram Mini App (auth flow stuck on "Загрузка...")

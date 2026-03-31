@@ -14,14 +14,14 @@ import {
   Wallet,
   Plus,
   Loader2,
-  LogIn,
+  AlertCircle,
 } from "lucide-react";
 
 import VoiceRecorder from "@/components/VoiceRecorder";
 import TransactionForm from "@/components/TransactionForm";
 
 export default function Home() {
-  const { user, loading, isAuthenticated, error } = useTelegramAuth();
+  const { user, loading, isAuthenticated, error, authState } = useTelegramAuth();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [voiceResult, setVoiceResult] = useState<any>(null);
 
@@ -39,43 +39,61 @@ export default function Home() {
     setShowAddDialog(true);
   };
 
+  // Loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Инициализация...</p>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
+  // Error state (e.g. opened outside Telegram)
+  if (authState === "error" && !isAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-6">
         <div className="w-20 h-20 rounded-2xl bg-primary/20 flex items-center justify-center">
           <Wallet className="h-10 w-10 text-primary" />
         </div>
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold">Voice Finance</h1>
+          <h1 className="text-2xl font-bold">CA$HUAL</h1>
           <p className="text-muted-foreground text-sm">
-            Голосовой финансовый трекер. Диктуйте расходы и доходы на русском,
-            азербайджанском или английском.
+            Голосовой финансовый трекер
           </p>
         </div>
-        <Button disabled className="w-full max-w-xs h-12">
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          Загрузка...
-        </Button>
+        {error ? (
+          <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-xl p-4 max-w-xs w-full">
+            <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        ) : null}
+        <p className="text-xs text-muted-foreground text-center max-w-xs">
+          Откройте приложение через Telegram бота{" "}
+          <span className="text-primary font-medium">@cashua_appl_bot</span>
+        </p>
+      </div>
+    );
+  }
+
+  // Not authenticated but no error (shouldn't happen, but guard)
+  if (!isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-6">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Авторизация...</p>
       </div>
     );
   }
 
   return (
-    <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto">
+    <div className="px-4 pt-4 pb-24 space-y-4 max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">Привет,</p>
           <h1 className="text-xl font-bold">
-            {user?.telegramFirstName || user?.name || "Пользователь"}
+            {user?.telegramFirstName || user?.name || "Пользователь"} 👋
           </h1>
         </div>
         <Button
@@ -116,7 +134,11 @@ export default function Home() {
             <div>
               <p className="text-[10px] text-muted-foreground">Доходы</p>
               <p className="text-sm font-semibold text-income">
-                {summaryLoading ? "..." : (summary?.totalIncome ?? 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })}
+                {summaryLoading
+                  ? "..."
+                  : (summary?.totalIncome ?? 0).toLocaleString("ru-RU", {
+                      minimumFractionDigits: 2,
+                    })}
               </p>
             </div>
           </div>
@@ -127,7 +149,11 @@ export default function Home() {
             <div>
               <p className="text-[10px] text-muted-foreground">Расходы</p>
               <p className="text-sm font-semibold text-expense">
-                {summaryLoading ? "..." : (summary?.totalExpense ?? 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })}
+                {summaryLoading
+                  ? "..."
+                  : (summary?.totalExpense ?? 0).toLocaleString("ru-RU", {
+                      minimumFractionDigits: 2,
+                    })}
               </p>
             </div>
           </div>
@@ -138,29 +164,21 @@ export default function Home() {
       <div className="tg-card text-center">
         <p className="text-sm font-medium mb-3">Голосовой ввод</p>
         <VoiceRecorder onResult={handleVoiceResult} />
-        <p className="text-[10px] text-muted-foreground mt-2">
-          RU / AZ / EN
-        </p>
+        <p className="text-[10px] text-muted-foreground mt-2">RU / AZ / EN</p>
       </div>
 
       {/* Recent Transactions */}
       <div className="tg-section">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold">Последние записи</h2>
-          <a
-            href="/transactions"
-            className="text-xs text-primary font-medium"
-          >
+          <a href="/transactions" className="text-xs text-primary font-medium">
             Все →
           </a>
         </div>
         {txnsLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-14 bg-card rounded-xl animate-pulse"
-              />
+              <div key={i} className="h-14 bg-card rounded-xl animate-pulse" />
             ))}
           </div>
         ) : recentTxns && recentTxns.length > 0 ? (
@@ -178,7 +196,8 @@ export default function Home() {
                     {t.transaction.description || t.categoryName || "Транзакция"}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    {t.categoryName} · {new Date(t.transaction.date).toLocaleDateString("ru-RU")}
+                    {t.categoryName} ·{" "}
+                    {new Date(t.transaction.date).toLocaleDateString("ru-RU")}
                   </p>
                 </div>
                 <p
