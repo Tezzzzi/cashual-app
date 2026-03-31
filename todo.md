@@ -88,4 +88,9 @@
 - [x] Fix receipt scanner only saves first transaction (need multi-transaction + duplicate detection)
 
 ## Bug Fixes (Round 4)
-- [ ] Fix reports time filter ROOT CAUSE (7d/30d return empty for real user — investigate actual dates in production DB)
+- [x] Fix reports time filter ROOT CAUSE (7d/30d return empty for real user — investigate actual dates in production DB)
+  Root cause: LLM was returning dates in seconds, stored as-is. Filter compared ms vs s. Fixed with normalizeTimestampMs() + startup migration.
+
+## Bug Fixes (Round 5)
+- [x] Fix reports time filter for REAL user (improved threshold from 1e11 to 1e12 to catch all seconds timestamps)
+- [x] Add family budget shared reports with 3 filters: My expenses / Partner's expenses / All together

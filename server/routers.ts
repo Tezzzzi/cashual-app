@@ -482,8 +482,6 @@ Always return a transactions array, even for a single receipt (array with one it
 });
 
 // ─── Reports Router ──────────────────────────────────────────────────
-
-// ─── Reports Router ──────────────────────────────────────────────────
 const reportsRouter = router({
   summary: protectedProcedure
     .input(
@@ -492,6 +490,7 @@ const reportsRouter = router({
           startDate: z.number().optional(),
           endDate: z.number().optional(),
           familyGroupId: z.number().optional(),
+          scope: z.enum(["mine", "partner", "all"]).optional(),
         })
         .optional()
     )
@@ -500,7 +499,19 @@ const reportsRouter = router({
         const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
         if (!isMember) throw new TRPCError({ code: "FORBIDDEN" });
       }
-      return getReportSummary(ctx.user.id, input ?? undefined);
+      // Resolve scope to userIds for family reports
+      let userIds: number[] | undefined;
+      if (input?.familyGroupId && input?.scope) {
+        const members = await getFamilyGroupMembers(input.familyGroupId);
+        if (input.scope === "mine") {
+          userIds = [ctx.user.id];
+        } else if (input.scope === "partner") {
+          userIds = members.filter((m) => m.member.userId !== ctx.user.id).map((m) => m.member.userId);
+        } else {
+          userIds = members.map((m) => m.member.userId);
+        }
+      }
+      return getReportSummary(ctx.user.id, { ...input, userIds });
     }),
 
   byCategory: protectedProcedure
@@ -511,6 +522,7 @@ const reportsRouter = router({
           endDate: z.number().optional(),
           familyGroupId: z.number().optional(),
           type: z.enum(["income", "expense"]).optional(),
+          scope: z.enum(["mine", "partner", "all"]).optional(),
         })
         .optional()
     )
@@ -519,8 +531,42 @@ const reportsRouter = router({
         const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
         if (!isMember) throw new TRPCError({ code: "FORBIDDEN" });
       }
-      return getReportByCategory(ctx.user.id, input ?? undefined);
+      let userIds: number[] | undefined;
+      if (input?.familyGroupId && input?.scope) {
+        const members = await getFamilyGroupMembers(input.familyGroupId);
+        if (input.scope === "mine") {
+          userIds = [ctx.user.id];
+        } else if (input.scope === "partner") {
+          userIds = members.filter((m) => m.member.userId !== ctx.user.id).map((m) => m.member.userId);
+        } else {
+          userIds = members.map((m) => m.member.userId);
+        }
+      }
+      return getReportByCategory(ctx.user.id, { ...input, userIds });
     }),
+
+  // Debug endpoint to inspect raw transaction dates
+  debugDates: protectedProcedure.query(async ({ ctx }) => {
+    const txns = await getTransactions(ctx.user.id, { limit: 50 });
+    const now = Date.now();
+    return {
+      currentTimeMs: now,
+      currentTimeISO: new Date(now).toISOString(),
+      sevenDaysAgoMs: now - 7 * 24 * 60 * 60 * 1000,
+      thirtyDaysAgoMs: now - 30 * 24 * 60 * 60 * 1000,
+      transactions: txns.map((t) => ({
+        id: t.transaction.id,
+        date: t.transaction.date,
+        dateISO: new Date(t.transaction.date).toISOString(),
+        dateIsSeconds: t.transaction.date < 1e11,
+        dateIsMs: t.transaction.date >= 1e11,
+        amount: t.transaction.amount,
+        description: t.transaction.description,
+        userId: t.transaction.userId,
+        isFamily: t.transaction.isFamily,
+      })),
+    };
+  }),
 
   exportCsv: protectedProcedure
     .input(
@@ -552,7 +598,6 @@ const reportsRouter = router({
         .join("\n");
 
       const csv = header + rows;
-      // Return CSV data directly (no S3 storage)
       return { 
         csv,
         filename: `transactions_${new Date().toISOString().split("T")[0]}.csv`,

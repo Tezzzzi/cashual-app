@@ -123,7 +123,7 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
 // server/db.ts
-import { eq, and, sql, desc, gte, lte } from "drizzle-orm";
+import { eq, and, sql, desc, gte, lte, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 
 // drizzle/schema.ts
@@ -339,7 +339,7 @@ async function seedPresetCategories() {
   await db.insert(categories).values(presets);
 }
 function normalizeTimestampMs(ts) {
-  if (ts > 0 && ts < 1e11) {
+  if (ts > 0 && ts < 1e12) {
     return ts * 1e3;
   }
   return ts;
@@ -391,7 +391,11 @@ async function getReportSummary(userId, opts) {
   const db = await getDb();
   if (!db) return { totalIncome: 0, totalExpense: 0, balance: 0 };
   const conditions = [];
-  if (opts?.familyGroupId) {
+  if (opts?.familyGroupId && opts?.userIds && opts.userIds.length > 0) {
+    conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
+    conditions.push(eq(transactions.isFamily, true));
+    conditions.push(inArray(transactions.userId, opts.userIds));
+  } else if (opts?.familyGroupId) {
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else {
@@ -415,7 +419,11 @@ async function getReportByCategory(userId, opts) {
   const db = await getDb();
   if (!db) return [];
   const conditions = [];
-  if (opts?.familyGroupId) {
+  if (opts?.familyGroupId && opts?.userIds && opts.userIds.length > 0) {
+    conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
+    conditions.push(eq(transactions.isFamily, true));
+    conditions.push(inArray(transactions.userId, opts.userIds));
+  } else if (opts?.familyGroupId) {
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else {
@@ -1352,28 +1360,74 @@ var reportsRouter = router({
     z2.object({
       startDate: z2.number().optional(),
       endDate: z2.number().optional(),
-      familyGroupId: z2.number().optional()
+      familyGroupId: z2.number().optional(),
+      scope: z2.enum(["mine", "partner", "all"]).optional()
     }).optional()
   ).query(async ({ ctx, input }) => {
     if (input?.familyGroupId) {
       const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
       if (!isMember) throw new TRPCError3({ code: "FORBIDDEN" });
     }
-    return getReportSummary(ctx.user.id, input ?? void 0);
+    let userIds;
+    if (input?.familyGroupId && input?.scope) {
+      const members = await getFamilyGroupMembers(input.familyGroupId);
+      if (input.scope === "mine") {
+        userIds = [ctx.user.id];
+      } else if (input.scope === "partner") {
+        userIds = members.filter((m) => m.member.userId !== ctx.user.id).map((m) => m.member.userId);
+      } else {
+        userIds = members.map((m) => m.member.userId);
+      }
+    }
+    return getReportSummary(ctx.user.id, { ...input, userIds });
   }),
   byCategory: protectedProcedure.input(
     z2.object({
       startDate: z2.number().optional(),
       endDate: z2.number().optional(),
       familyGroupId: z2.number().optional(),
-      type: z2.enum(["income", "expense"]).optional()
+      type: z2.enum(["income", "expense"]).optional(),
+      scope: z2.enum(["mine", "partner", "all"]).optional()
     }).optional()
   ).query(async ({ ctx, input }) => {
     if (input?.familyGroupId) {
       const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
       if (!isMember) throw new TRPCError3({ code: "FORBIDDEN" });
     }
-    return getReportByCategory(ctx.user.id, input ?? void 0);
+    let userIds;
+    if (input?.familyGroupId && input?.scope) {
+      const members = await getFamilyGroupMembers(input.familyGroupId);
+      if (input.scope === "mine") {
+        userIds = [ctx.user.id];
+      } else if (input.scope === "partner") {
+        userIds = members.filter((m) => m.member.userId !== ctx.user.id).map((m) => m.member.userId);
+      } else {
+        userIds = members.map((m) => m.member.userId);
+      }
+    }
+    return getReportByCategory(ctx.user.id, { ...input, userIds });
+  }),
+  // Debug endpoint to inspect raw transaction dates
+  debugDates: protectedProcedure.query(async ({ ctx }) => {
+    const txns = await getTransactions(ctx.user.id, { limit: 50 });
+    const now = Date.now();
+    return {
+      currentTimeMs: now,
+      currentTimeISO: new Date(now).toISOString(),
+      sevenDaysAgoMs: now - 7 * 24 * 60 * 60 * 1e3,
+      thirtyDaysAgoMs: now - 30 * 24 * 60 * 60 * 1e3,
+      transactions: txns.map((t2) => ({
+        id: t2.transaction.id,
+        date: t2.transaction.date,
+        dateISO: new Date(t2.transaction.date).toISOString(),
+        dateIsSeconds: t2.transaction.date < 1e11,
+        dateIsMs: t2.transaction.date >= 1e11,
+        amount: t2.transaction.amount,
+        description: t2.transaction.description,
+        userId: t2.transaction.userId,
+        isFamily: t2.transaction.isFamily
+      }))
+    };
   }),
   exportCsv: protectedProcedure.input(
     z2.object({

@@ -26,7 +26,7 @@ try {
     console.log('[startup] Checking for transaction dates stored in seconds...');
     const conn = await mysql.createConnection(process.env.DATABASE_URL);
     const [rows] = await conn.execute(
-      'UPDATE transactions SET date = date * 1000 WHERE date > 0 AND date < 100000000000'
+      'UPDATE transactions SET date = date * 1000 WHERE date > 0 AND date < 1000000000000'
     );
     const affected = rows.affectedRows || 0;
     if (affected > 0) {

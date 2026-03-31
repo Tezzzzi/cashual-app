@@ -183,14 +183,14 @@ export async function seedPresetCategories() {
 // ─── Timestamp Normalization ────────────────────────────────────────
 /**
  * Ensures a timestamp is in milliseconds.
- * If the value looks like seconds (< 1e12), multiply by 1000.
- * This handles cases where the LLM returns Unix seconds instead of milliseconds.
+ * Current epoch in seconds: ~1.74e9 (Mar 2025)
+ * Current epoch in milliseconds: ~1.74e12
+ * Threshold: anything < 1e12 is treated as seconds.
+ * This safely covers seconds timestamps up to year ~33658.
  */
 export function normalizeTimestampMs(ts: number): number {
-  // Timestamps before year ~2001 in ms would be < 1e12
-  // Current seconds timestamps are ~1.77e9, current ms timestamps are ~1.77e12
-  if (ts > 0 && ts < 1e11) {
-    // Definitely seconds (before year 5138 in seconds)
+  if (ts > 0 && ts < 1e12) {
+    // Definitely seconds — convert to milliseconds
     return ts * 1000;
   }
   return ts;
@@ -282,15 +282,20 @@ export async function deleteTransaction(id: number, userId: number) {
 // ─── Reports ─────────────────────────────────────────────────────────
 export async function getReportSummary(
   userId: number,
-  opts?: { startDate?: number; endDate?: number; familyGroupId?: number }
+  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; userIds?: number[] }
 ) {
   const db = await getDb();
   if (!db) return { totalIncome: 0, totalExpense: 0, balance: 0 };
 
   const conditions = [];
 
-  if (opts?.familyGroupId) {
-    // Filter by specific family group
+  if (opts?.familyGroupId && opts?.userIds && opts.userIds.length > 0) {
+    // Family shared reports: filter by family group + specific user IDs
+    conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
+    conditions.push(eq(transactions.isFamily, true));
+    conditions.push(inArray(transactions.userId, opts.userIds));
+  } else if (opts?.familyGroupId) {
+    // Filter by specific family group (all members)
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else {
@@ -322,15 +327,20 @@ export async function getReportSummary(
 
 export async function getReportByCategory(
   userId: number,
-  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; type?: "income" | "expense" }
+  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; type?: "income" | "expense"; userIds?: number[] }
 ) {
   const db = await getDb();
   if (!db) return [];
 
   const conditions = [];
 
-  if (opts?.familyGroupId) {
-    // Filter by specific family group
+  if (opts?.familyGroupId && opts?.userIds && opts.userIds.length > 0) {
+    // Family shared reports: filter by family group + specific user IDs
+    conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
+    conditions.push(eq(transactions.isFamily, true));
+    conditions.push(inArray(transactions.userId, opts.userIds));
+  } else if (opts?.familyGroupId) {
+    // Filter by specific family group (all members)
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else {
@@ -402,7 +412,7 @@ export async function fixTransactionDates() {
     // Any date value less than 1e11 is definitely in seconds (before year 5138 in seconds)
     // Multiply by 1000 to convert to milliseconds
     const result = await db.execute(
-      sql`UPDATE transactions SET date = date * 1000 WHERE date > 0 AND date < 100000000000`
+      sql`UPDATE transactions SET date = date * 1000 WHERE date > 0 AND date < 1000000000000`
     );
     console.log("[Database] Fixed transaction dates (seconds → milliseconds)");
   } catch (error) {

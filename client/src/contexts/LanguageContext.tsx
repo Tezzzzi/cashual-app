@@ -128,6 +128,12 @@ const translations = {
     default_budget_family: "Семейный",
     default_budget_desc: "Какой бюджет выбирать по умолчанию при добавлении транзакции",
 
+    // Family scope in reports
+    scope_personal: "Мои",
+    scope_partner: "Партнёра",
+    scope_all: "Все вместе",
+    family_report_label: "Семейный отчёт",
+
     // Receipt
     scan_receipt: "Сканировать чек",
     receipt_title: "Распознать чек",
@@ -270,6 +276,12 @@ const translations = {
     default_budget_family: "Ailə",
     default_budget_desc: "Əməliyyat əlavə edərkən hansı büdcəni standart seçmək",
 
+    // Family scope in reports
+    scope_personal: "Mənim",
+    scope_partner: "Partnerin",
+    scope_all: "Hamısı birlikdə",
+    family_report_label: "Ailə hesabatı",
+
     // Receipt
     scan_receipt: "Çeki skan et",
     receipt_title: "Çeki tanı",
@@ -411,6 +423,12 @@ const translations = {
     default_budget_personal: "Personal",
     default_budget_family: "Family",
     default_budget_desc: "Which budget to select by default when adding a transaction",
+
+    // Family scope in reports
+    scope_personal: "Mine",
+    scope_partner: "Partner's",
+    scope_all: "All together",
+    family_report_label: "Family report",
 
     // Receipt
     scan_receipt: "Scan Receipt",

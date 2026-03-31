@@ -9,6 +9,7 @@ import {
   ArrowDownCircle,
   Wallet,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import {
   PieChart,
@@ -21,10 +22,10 @@ import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 type Period = "week" | "month" | "year" | "all";
+type Scope = "mine" | "partner" | "all";
 
 function getPeriodRange(period: Period): { startDate?: number; endDate?: number } {
   if (period === "all") return {};
-  // Always use current time when computing the range (not a stale memo)
   const now = Date.now();
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
   let startMs: number;
@@ -49,17 +50,39 @@ export default function Reports() {
   const { t, translateCategory } = useLanguage();
   const [period, setPeriod] = useState<Period>("all");
   const [reportType, setReportType] = useState<"expense" | "income">("expense");
+  const [scope, setScope] = useState<Scope>("mine");
+
+  // Fetch family groups to determine if user has a family
+  const { data: familyGroups } = trpc.family.myGroups.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const hasFamily = (familyGroups?.length ?? 0) > 0;
+  const familyGroupId = hasFamily ? familyGroups![0].group.id : undefined;
 
   const range = useMemo(() => getPeriodRange(period), [period]);
 
+  // Build query params — include familyGroupId and scope only when viewing family reports
+  const summaryParams = useMemo(() => {
+    const base = { ...range };
+    if (hasFamily && scope !== "mine") {
+      return { ...base, familyGroupId, scope };
+    }
+    return base;
+  }, [range, hasFamily, scope, familyGroupId]);
+
+  const byCategoryParams = useMemo(() => {
+    const base = { ...range, type: reportType };
+    if (hasFamily && scope !== "mine") {
+      return { ...base, familyGroupId, scope };
+    }
+    return base;
+  }, [range, reportType, hasFamily, scope, familyGroupId]);
+
   const { data: summary, isLoading: summaryLoading } =
-    trpc.reports.summary.useQuery(range, { enabled: isAuthenticated });
+    trpc.reports.summary.useQuery(summaryParams, { enabled: isAuthenticated });
 
   const { data: byCategory, isLoading: catLoading } =
-    trpc.reports.byCategory.useQuery(
-      { ...range, type: reportType },
-      { enabled: isAuthenticated }
-    );
+    trpc.reports.byCategory.useQuery(byCategoryParams, { enabled: isAuthenticated });
 
   const exportCsv = trpc.reports.exportCsv.useMutation({
     onSuccess: (data) => {
@@ -85,7 +108,7 @@ export default function Reports() {
       color: c.categoryColor || "#6366f1",
       icon: c.categoryIcon || "📦",
     }));
-  }, [byCategory]);
+  }, [byCategory, translateCategory]);
 
   const totalForType = useMemo(
     () => pieData.reduce((sum, d) => sum + d.value, 0),
@@ -105,6 +128,12 @@ export default function Reports() {
     { key: "month", label: t("month") },
     { key: "year", label: t("year") },
     { key: "all", label: t("all_time") },
+  ];
+
+  const scopes: { key: Scope; label: string }[] = [
+    { key: "mine", label: t("scope_personal") },
+    { key: "partner", label: t("scope_partner") },
+    { key: "all", label: t("scope_all") },
   ];
 
   return (
@@ -143,6 +172,31 @@ export default function Reports() {
           </Button>
         ))}
       </div>
+
+      {/* Family Scope Selector — only shown when user has a family group */}
+      {hasFamily && (
+        <div className="tg-card">
+          <div className="flex items-center gap-2 mb-2">
+            <Users className="h-4 w-4 text-primary" />
+            <span className="text-xs font-semibold text-muted-foreground">
+              {t("family_report_label")}
+            </span>
+          </div>
+          <div className="flex gap-1.5">
+            {scopes.map((s) => (
+              <Button
+                key={s.key}
+                variant={scope === s.key ? "default" : "outline"}
+                size="sm"
+                className={`flex-1 text-xs ${scope === s.key ? "bg-primary text-primary-foreground" : ""}`}
+                onClick={() => setScope(s.key)}
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-2">
