@@ -24,6 +24,11 @@ import {
   getFamilyGroupMembers,
   isGroupMember,
   updateUserTelegram,
+  getFamilyPermissions,
+  getMyPermissions,
+  setFamilyPermission,
+  getViewableUserIds,
+  initializePermissionsForNewMember,
 } from "./db";
 import { transcribeAudio } from "./_core/openai-whisper";
 import { invokeLLM } from "./_core/openai-llm";
@@ -175,13 +180,19 @@ const voiceRouter = router({
 
       // Step 3: Parse with LLM
       const now = new Date();
+      const currentYear = now.getFullYear();
+      const todayMs = now.getTime();
       const llmResult = await invokeLLM({
         messages: [
           {
             role: "system",
             content: `You are a financial transaction parser. Extract structured data from the user's voice transcription.
 Available categories: ${categoryNames}
-Current date: ${now.toISOString()}
+
+**IMPORTANT — TODAY'S DATE: ${now.toISOString()} (year ${currentYear})**
+The current Unix timestamp in milliseconds is: ${todayMs}
+You MUST use the year ${currentYear} for all dates. Do NOT use 2024 or any other year unless the user explicitly mentions a past year.
+
 User's preferred currency: ${ctx.user.preferredCurrency || "AZN"}
 
 Rules:
@@ -190,7 +201,8 @@ Rules:
 - Extract the amount (number only)
 - Determine the currency (default: ${ctx.user.preferredCurrency || "AZN"})
 - Create a short description
-- If no specific date mentioned, use today
+- If no specific date mentioned, use today's timestamp: ${todayMs}
+- The date field MUST be a Unix timestamp in milliseconds in the year ${currentYear}
 - Detect the language of the transcription (ru, az, en)`,
           },
           {
@@ -227,6 +239,25 @@ Rules:
       }
 
       const parsed = JSON.parse(content);
+
+      // Server-side date validation: fix dates with wrong year from LLM
+      if (parsed.date) {
+        const parsedDate = new Date(parsed.date);
+        const parsedYear = parsedDate.getFullYear();
+        if (parsedYear !== currentYear && parsedYear >= 2020 && parsedYear < currentYear) {
+          // LLM returned a past year (e.g. 2024) — fix to current year
+          parsedDate.setFullYear(currentYear);
+          parsed.date = parsedDate.getTime();
+          console.log(`[voice] Fixed LLM date from year ${parsedYear} to ${currentYear}: ${parsed.date}`);
+        }
+        // If date is still unreasonable (more than 1 day in the future), use now
+        if (parsed.date > todayMs + 86400000) {
+          parsed.date = todayMs;
+          console.log(`[voice] Date was in the future, reset to now: ${parsed.date}`);
+        }
+      } else {
+        parsed.date = todayMs;
+      }
 
       // Match category
       const matchedCategory = userCategories.find(
@@ -290,6 +321,8 @@ Rules:
       const categoryNames = userCategories.map((c) => c.name).join(", ");
 
       const now = new Date();
+      const currentYear = now.getFullYear();
+      const todayMs = now.getTime();
       const llmResult = await invokeLLM({
         messages: [
           {
@@ -297,7 +330,11 @@ Rules:
             content: `You are a financial transaction image parser. Analyze the provided image and extract transaction data.
 
 Available categories: ${categoryNames}
-Current date: ${now.toISOString()}
+
+**IMPORTANT — TODAY'S DATE: ${now.toISOString()} (year ${currentYear})**
+The current Unix timestamp in milliseconds is: ${todayMs}
+You MUST use the year ${currentYear} for all dates. Do NOT use 2024 or any other year unless the image explicitly shows a different year.
+
 Default currency: ${ctx.user.preferredCurrency || "AZN"}
 
 CRITICAL RULES — read carefully:
@@ -305,7 +342,7 @@ CRITICAL RULES — read carefully:
 1. BANK/WALLET APP SCREENSHOT (e.g. Apple Wallet, bank app showing "Latest Transactions", transaction history list):
    → Extract EACH individual transaction as a SEPARATE entry in the transactions array.
    → Do NOT merge them into one. Each row in the list = one transaction object.
-   → For relative dates ("3 hours ago", "Yesterday", "Sunday", "Saturday"), convert to absolute UTC timestamps using the current date: ${now.toISOString()}
+   → For relative dates ("3 hours ago", "Yesterday", "Sunday", "Saturday"), convert to absolute UTC timestamps using the current date: ${now.toISOString()} (year ${currentYear})
 
 2. STORE RECEIPT / CASH REGISTER RECEIPT (кассовый чек — a paper receipt from a store/restaurant):
    → Extract ONLY the TOTAL/FINAL amount as a SINGLE transaction.
@@ -318,7 +355,7 @@ For each transaction:
 - currency: detect from image (default: ${ctx.user.preferredCurrency || "AZN"})
 - categoryName: best match from available categories
 - description: merchant name or meaningful description
-- date: UTC timestamp in milliseconds
+- date: UTC timestamp in milliseconds (MUST be in the year ${currentYear} unless the image shows a specific past date)
 - confidence: "high"/"medium"/"low"
 
 Always return a transactions array, even for a single receipt (array with one item).`,
@@ -392,6 +429,25 @@ Always return a transactions array, even for a single receipt (array with one it
           confidence: "high" | "medium" | "low";
         }>;
       };
+
+      // Server-side date validation: fix dates with wrong year from LLM
+      for (const tx of parsed.transactions) {
+        if (tx.date) {
+          const txDate = new Date(tx.date);
+          const txYear = txDate.getFullYear();
+          if (txYear !== currentYear && txYear >= 2020 && txYear < currentYear) {
+            txDate.setFullYear(currentYear);
+            tx.date = txDate.getTime();
+            console.log(`[receipt] Fixed LLM date from year ${txYear} to ${currentYear}: ${tx.date}`);
+          }
+          if (tx.date > todayMs + 86400000) {
+            tx.date = todayMs;
+            console.log(`[receipt] Date was in the future, reset to now: ${tx.date}`);
+          }
+        } else {
+          tx.date = todayMs;
+        }
+      }
 
       // Match categories for each transaction
       const matchCategory = (categoryName: string) => {
@@ -499,16 +555,19 @@ const reportsRouter = router({
         const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
         if (!isMember) throw new TRPCError({ code: "FORBIDDEN" });
       }
-      // Resolve scope to userIds for family reports
+      // Resolve scope to userIds for family reports, filtered by permissions
       let userIds: number[] | undefined;
       if (input?.familyGroupId && input?.scope) {
-        const members = await getFamilyGroupMembers(input.familyGroupId);
+        // Get the list of members whose expenses I'm allowed to see
+        const viewableIds = await getViewableUserIds(input.familyGroupId, ctx.user.id);
         if (input.scope === "mine") {
           userIds = [ctx.user.id];
         } else if (input.scope === "partner") {
-          userIds = members.filter((m) => m.member.userId !== ctx.user.id).map((m) => m.member.userId);
+          // Only show partners who have granted me access
+          userIds = viewableIds.filter((id) => id !== ctx.user.id);
         } else {
-          userIds = members.map((m) => m.member.userId);
+          // "all" — show myself + everyone who granted me access
+          userIds = viewableIds;
         }
       }
       return getReportSummary(ctx.user.id, { ...input, userIds });
@@ -533,13 +592,13 @@ const reportsRouter = router({
       }
       let userIds: number[] | undefined;
       if (input?.familyGroupId && input?.scope) {
-        const members = await getFamilyGroupMembers(input.familyGroupId);
+        const viewableIds = await getViewableUserIds(input.familyGroupId, ctx.user.id);
         if (input.scope === "mine") {
           userIds = [ctx.user.id];
         } else if (input.scope === "partner") {
-          userIds = members.filter((m) => m.member.userId !== ctx.user.id).map((m) => m.member.userId);
+          userIds = viewableIds.filter((id) => id !== ctx.user.id);
         } else {
-          userIds = members.map((m) => m.member.userId);
+          userIds = viewableIds;
         }
       }
       return getReportByCategory(ctx.user.id, { ...input, userIds });
@@ -641,6 +700,8 @@ const familyRouter = router({
       const group = await getFamilyGroupByInviteCode(input.inviteCode.toUpperCase());
       if (!group) throw new TRPCError({ code: "NOT_FOUND", message: "Invalid invite code" });
       await joinFamilyGroup(group.id, ctx.user.id);
+      // Initialize default permissions (everyone can see everyone)
+      await initializePermissionsForNewMember(group.id, ctx.user.id);
       return group;
     }),
 
@@ -657,6 +718,46 @@ const familyRouter = router({
       const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
       if (!isMember) throw new TRPCError({ code: "FORBIDDEN" });
       return getFamilyGroupMembers(input.familyGroupId);
+    }),
+
+  // Get permissions I've set (who can see MY expenses)
+  myPermissions: protectedProcedure
+    .input(z.object({ familyGroupId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
+      if (!isMember) throw new TRPCError({ code: "FORBIDDEN" });
+      return getMyPermissions(input.familyGroupId, ctx.user.id);
+    }),
+
+  // Set permission: allow/deny a specific member from seeing my expenses
+  setPermission: protectedProcedure
+    .input(
+      z.object({
+        familyGroupId: z.number(),
+        granteeId: z.number(),
+        canViewExpenses: z.boolean(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
+      if (!isMember) throw new TRPCError({ code: "FORBIDDEN" });
+      // Grantor is always the current user
+      await setFamilyPermission(
+        input.familyGroupId,
+        ctx.user.id,
+        input.granteeId,
+        input.canViewExpenses
+      );
+      return { success: true };
+    }),
+
+  // Get which user IDs I can view in a family group (for reports)
+  viewableMembers: protectedProcedure
+    .input(z.object({ familyGroupId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
+      if (!isMember) throw new TRPCError({ code: "FORBIDDEN" });
+      return getViewableUserIds(input.familyGroupId, ctx.user.id);
     }),
 });
 

@@ -111,9 +111,106 @@ var init_storage = __esm({
   }
 });
 
+// vite.config.ts
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import path2 from "node:path";
+import { defineConfig } from "vite";
+var vite_config_default;
+var init_vite_config = __esm({
+  "vite.config.ts"() {
+    "use strict";
+    vite_config_default = defineConfig({
+      plugins: [react(), tailwindcss()],
+      resolve: {
+        alias: {
+          "@": path2.resolve(import.meta.dirname, "client", "src"),
+          "@shared": path2.resolve(import.meta.dirname, "shared"),
+          "@assets": path2.resolve(import.meta.dirname, "attached_assets")
+        }
+      },
+      envDir: path2.resolve(import.meta.dirname),
+      root: path2.resolve(import.meta.dirname, "client"),
+      publicDir: path2.resolve(import.meta.dirname, "client", "public"),
+      build: {
+        outDir: path2.resolve(import.meta.dirname, "dist/public"),
+        emptyOutDir: true
+      },
+      server: {
+        host: true
+      }
+    });
+  }
+});
+
+// server/_core/vite.ts
+var vite_exports = {};
+__export(vite_exports, {
+  serveStatic: () => serveStatic2,
+  setupVite: () => setupVite
+});
+import express2 from "express";
+import fs2 from "fs";
+import { nanoid as nanoid2 } from "nanoid";
+import path3 from "path";
+import { createServer as createViteServer } from "vite";
+async function setupVite(app, server) {
+  const serverOptions = {
+    middlewareMode: true,
+    hmr: { server },
+    allowedHosts: true
+  };
+  const vite = await createViteServer({
+    ...vite_config_default,
+    configFile: false,
+    server: serverOptions,
+    appType: "custom"
+  });
+  app.use(vite.middlewares);
+  app.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+    try {
+      const clientTemplate = path3.resolve(
+        import.meta.dirname,
+        "../..",
+        "client",
+        "index.html"
+      );
+      let template = await fs2.promises.readFile(clientTemplate, "utf-8");
+      template = template.replace(
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid2()}"`
+      );
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+    } catch (e) {
+      vite.ssrFixStacktrace(e);
+      next(e);
+    }
+  });
+}
+function serveStatic2(app) {
+  const distPath = process.env.NODE_ENV === "development" ? path3.resolve(import.meta.dirname, "../..", "dist", "public") : path3.resolve(import.meta.dirname, "public");
+  if (!fs2.existsSync(distPath)) {
+    console.error(
+      `Could not find the build directory: ${distPath}, make sure to build the client first`
+    );
+  }
+  app.use(express2.static(distPath));
+  app.use("*", (_req, res) => {
+    res.sendFile(path3.resolve(distPath, "index.html"));
+  });
+}
+var init_vite = __esm({
+  "server/_core/vite.ts"() {
+    "use strict";
+    init_vite_config();
+  }
+});
+
 // server/_core/index.ts
 import "dotenv/config";
-import express2 from "express";
+import express3 from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -202,6 +299,17 @@ var familyGroupMembers = mysqlTable("familyGroupMembers", {
   familyGroupId: int("familyGroupId").notNull(),
   userId: int("userId").notNull(),
   joinedAt: timestamp("joinedAt").defaultNow().notNull()
+});
+var familyPermissions = mysqlTable("familyPermissions", {
+  id: int("id").autoincrement().primaryKey(),
+  familyGroupId: int("familyGroupId").notNull(),
+  grantorId: int("grantorId").notNull(),
+  // user who owns the expenses
+  granteeId: int("granteeId").notNull(),
+  // user who can view them
+  canViewExpenses: boolean("canViewExpenses").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
 
 // server/db.ts
@@ -499,6 +607,66 @@ async function isGroupMember(familyGroupId, userId) {
     )
   ).limit(1);
   return result.length > 0;
+}
+async function getMyPermissions(familyGroupId, grantorId) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(familyPermissions).where(
+    and(
+      eq(familyPermissions.familyGroupId, familyGroupId),
+      eq(familyPermissions.grantorId, grantorId)
+    )
+  );
+}
+async function setFamilyPermission(familyGroupId, grantorId, granteeId, canViewExpenses) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(familyPermissions).where(
+    and(
+      eq(familyPermissions.familyGroupId, familyGroupId),
+      eq(familyPermissions.grantorId, grantorId),
+      eq(familyPermissions.granteeId, granteeId)
+    )
+  ).limit(1);
+  if (existing.length > 0) {
+    await db.update(familyPermissions).set({ canViewExpenses }).where(eq(familyPermissions.id, existing[0].id));
+  } else {
+    await db.insert(familyPermissions).values({
+      familyGroupId,
+      grantorId,
+      granteeId,
+      canViewExpenses
+    });
+  }
+}
+async function getViewableUserIds(familyGroupId, viewerId) {
+  const db = await getDb();
+  if (!db) return [viewerId];
+  const members = await db.select({ userId: familyGroupMembers.userId }).from(familyGroupMembers).where(eq(familyGroupMembers.familyGroupId, familyGroupId));
+  const allMemberIds = members.map((m) => m.userId);
+  const perms = await db.select().from(familyPermissions).where(
+    and(
+      eq(familyPermissions.familyGroupId, familyGroupId),
+      eq(familyPermissions.granteeId, viewerId)
+    )
+  );
+  const deniedGrantors = /* @__PURE__ */ new Set();
+  for (const p of perms) {
+    if (!p.canViewExpenses) {
+      deniedGrantors.add(p.grantorId);
+    }
+  }
+  return allMemberIds.filter((id) => !deniedGrantors.has(id));
+}
+async function initializePermissionsForNewMember(familyGroupId, newMemberId) {
+  const db = await getDb();
+  if (!db) return;
+  const members = await db.select({ userId: familyGroupMembers.userId }).from(familyGroupMembers).where(eq(familyGroupMembers.familyGroupId, familyGroupId));
+  for (const member of members) {
+    if (member.userId === newMemberId) continue;
+    await setFamilyPermission(familyGroupId, newMemberId, member.userId, true);
+    await setFamilyPermission(familyGroupId, member.userId, newMemberId, true);
+  }
 }
 
 // server/_core/telegram-auth.ts
@@ -1103,13 +1271,19 @@ var voiceRouter = router({
     const userCategories = await getCategories(ctx.user.id);
     const categoryNames = userCategories.map((c) => c.name).join(", ");
     const now = /* @__PURE__ */ new Date();
+    const currentYear = now.getFullYear();
+    const todayMs = now.getTime();
     const llmResult = await invokeLLM({
       messages: [
         {
           role: "system",
           content: `You are a financial transaction parser. Extract structured data from the user's voice transcription.
 Available categories: ${categoryNames}
-Current date: ${now.toISOString()}
+
+**IMPORTANT \u2014 TODAY'S DATE: ${now.toISOString()} (year ${currentYear})**
+The current Unix timestamp in milliseconds is: ${todayMs}
+You MUST use the year ${currentYear} for all dates. Do NOT use 2024 or any other year unless the user explicitly mentions a past year.
+
 User's preferred currency: ${ctx.user.preferredCurrency || "AZN"}
 
 Rules:
@@ -1118,7 +1292,8 @@ Rules:
 - Extract the amount (number only)
 - Determine the currency (default: ${ctx.user.preferredCurrency || "AZN"})
 - Create a short description
-- If no specific date mentioned, use today
+- If no specific date mentioned, use today's timestamp: ${todayMs}
+- The date field MUST be a Unix timestamp in milliseconds in the year ${currentYear}
 - Detect the language of the transcription (ru, az, en)`
         },
         {
@@ -1153,6 +1328,21 @@ Rules:
       throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Failed to parse transaction" });
     }
     const parsed = JSON.parse(content);
+    if (parsed.date) {
+      const parsedDate = new Date(parsed.date);
+      const parsedYear = parsedDate.getFullYear();
+      if (parsedYear !== currentYear && parsedYear >= 2020 && parsedYear < currentYear) {
+        parsedDate.setFullYear(currentYear);
+        parsed.date = parsedDate.getTime();
+        console.log(`[voice] Fixed LLM date from year ${parsedYear} to ${currentYear}: ${parsed.date}`);
+      }
+      if (parsed.date > todayMs + 864e5) {
+        parsed.date = todayMs;
+        console.log(`[voice] Date was in the future, reset to now: ${parsed.date}`);
+      }
+    } else {
+      parsed.date = todayMs;
+    }
     const matchedCategory = userCategories.find(
       (c) => c.name.toLowerCase() === parsed.categoryName.toLowerCase()
     ) || userCategories.find((c) => c.name.toLowerCase().includes(parsed.categoryName.toLowerCase())) || userCategories[userCategories.length - 1];
@@ -1200,6 +1390,8 @@ Rules:
     const userCategories = await getCategories(ctx.user.id);
     const categoryNames = userCategories.map((c) => c.name).join(", ");
     const now = /* @__PURE__ */ new Date();
+    const currentYear = now.getFullYear();
+    const todayMs = now.getTime();
     const llmResult = await invokeLLM({
       messages: [
         {
@@ -1207,7 +1399,11 @@ Rules:
           content: `You are a financial transaction image parser. Analyze the provided image and extract transaction data.
 
 Available categories: ${categoryNames}
-Current date: ${now.toISOString()}
+
+**IMPORTANT \u2014 TODAY'S DATE: ${now.toISOString()} (year ${currentYear})**
+The current Unix timestamp in milliseconds is: ${todayMs}
+You MUST use the year ${currentYear} for all dates. Do NOT use 2024 or any other year unless the image explicitly shows a different year.
+
 Default currency: ${ctx.user.preferredCurrency || "AZN"}
 
 CRITICAL RULES \u2014 read carefully:
@@ -1215,7 +1411,7 @@ CRITICAL RULES \u2014 read carefully:
 1. BANK/WALLET APP SCREENSHOT (e.g. Apple Wallet, bank app showing "Latest Transactions", transaction history list):
    \u2192 Extract EACH individual transaction as a SEPARATE entry in the transactions array.
    \u2192 Do NOT merge them into one. Each row in the list = one transaction object.
-   \u2192 For relative dates ("3 hours ago", "Yesterday", "Sunday", "Saturday"), convert to absolute UTC timestamps using the current date: ${now.toISOString()}
+   \u2192 For relative dates ("3 hours ago", "Yesterday", "Sunday", "Saturday"), convert to absolute UTC timestamps using the current date: ${now.toISOString()} (year ${currentYear})
 
 2. STORE RECEIPT / CASH REGISTER RECEIPT (\u043A\u0430\u0441\u0441\u043E\u0432\u044B\u0439 \u0447\u0435\u043A \u2014 a paper receipt from a store/restaurant):
    \u2192 Extract ONLY the TOTAL/FINAL amount as a SINGLE transaction.
@@ -1228,7 +1424,7 @@ For each transaction:
 - currency: detect from image (default: ${ctx.user.preferredCurrency || "AZN"})
 - categoryName: best match from available categories
 - description: merchant name or meaningful description
-- date: UTC timestamp in milliseconds
+- date: UTC timestamp in milliseconds (MUST be in the year ${currentYear} unless the image shows a specific past date)
 - confidence: "high"/"medium"/"low"
 
 Always return a transactions array, even for a single receipt (array with one item).`
@@ -1289,6 +1485,23 @@ Always return a transactions array, even for a single receipt (array with one it
       throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Failed to parse receipt" });
     }
     const parsed = JSON.parse(content);
+    for (const tx of parsed.transactions) {
+      if (tx.date) {
+        const txDate = new Date(tx.date);
+        const txYear = txDate.getFullYear();
+        if (txYear !== currentYear && txYear >= 2020 && txYear < currentYear) {
+          txDate.setFullYear(currentYear);
+          tx.date = txDate.getTime();
+          console.log(`[receipt] Fixed LLM date from year ${txYear} to ${currentYear}: ${tx.date}`);
+        }
+        if (tx.date > todayMs + 864e5) {
+          tx.date = todayMs;
+          console.log(`[receipt] Date was in the future, reset to now: ${tx.date}`);
+        }
+      } else {
+        tx.date = todayMs;
+      }
+    }
     const matchCategory = (categoryName) => {
       return userCategories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase()) || userCategories.find((c) => c.name.toLowerCase().includes(categoryName.toLowerCase())) || userCategories[userCategories.length - 1];
     };
@@ -1370,13 +1583,13 @@ var reportsRouter = router({
     }
     let userIds;
     if (input?.familyGroupId && input?.scope) {
-      const members = await getFamilyGroupMembers(input.familyGroupId);
+      const viewableIds = await getViewableUserIds(input.familyGroupId, ctx.user.id);
       if (input.scope === "mine") {
         userIds = [ctx.user.id];
       } else if (input.scope === "partner") {
-        userIds = members.filter((m) => m.member.userId !== ctx.user.id).map((m) => m.member.userId);
+        userIds = viewableIds.filter((id) => id !== ctx.user.id);
       } else {
-        userIds = members.map((m) => m.member.userId);
+        userIds = viewableIds;
       }
     }
     return getReportSummary(ctx.user.id, { ...input, userIds });
@@ -1396,13 +1609,13 @@ var reportsRouter = router({
     }
     let userIds;
     if (input?.familyGroupId && input?.scope) {
-      const members = await getFamilyGroupMembers(input.familyGroupId);
+      const viewableIds = await getViewableUserIds(input.familyGroupId, ctx.user.id);
       if (input.scope === "mine") {
         userIds = [ctx.user.id];
       } else if (input.scope === "partner") {
-        userIds = members.filter((m) => m.member.userId !== ctx.user.id).map((m) => m.member.userId);
+        userIds = viewableIds.filter((id) => id !== ctx.user.id);
       } else {
-        userIds = members.map((m) => m.member.userId);
+        userIds = viewableIds;
       }
     }
     return getReportByCategory(ctx.user.id, { ...input, userIds });
@@ -1484,6 +1697,7 @@ var familyRouter = router({
     const group = await getFamilyGroupByInviteCode(input.inviteCode.toUpperCase());
     if (!group) throw new TRPCError3({ code: "NOT_FOUND", message: "Invalid invite code" });
     await joinFamilyGroup(group.id, ctx.user.id);
+    await initializePermissionsForNewMember(group.id, ctx.user.id);
     return group;
   }),
   leave: protectedProcedure.input(z2.object({ familyGroupId: z2.number() })).mutation(async ({ ctx, input }) => {
@@ -1494,6 +1708,36 @@ var familyRouter = router({
     const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
     if (!isMember) throw new TRPCError3({ code: "FORBIDDEN" });
     return getFamilyGroupMembers(input.familyGroupId);
+  }),
+  // Get permissions I've set (who can see MY expenses)
+  myPermissions: protectedProcedure.input(z2.object({ familyGroupId: z2.number() })).query(async ({ ctx, input }) => {
+    const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
+    if (!isMember) throw new TRPCError3({ code: "FORBIDDEN" });
+    return getMyPermissions(input.familyGroupId, ctx.user.id);
+  }),
+  // Set permission: allow/deny a specific member from seeing my expenses
+  setPermission: protectedProcedure.input(
+    z2.object({
+      familyGroupId: z2.number(),
+      granteeId: z2.number(),
+      canViewExpenses: z2.boolean()
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
+    if (!isMember) throw new TRPCError3({ code: "FORBIDDEN" });
+    await setFamilyPermission(
+      input.familyGroupId,
+      ctx.user.id,
+      input.granteeId,
+      input.canViewExpenses
+    );
+    return { success: true };
+  }),
+  // Get which user IDs I can view in a family group (for reports)
+  viewableMembers: protectedProcedure.input(z2.object({ familyGroupId: z2.number() })).query(async ({ ctx, input }) => {
+    const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
+    if (!isMember) throw new TRPCError3({ code: "FORBIDDEN" });
+    return getViewableUserIds(input.familyGroupId, ctx.user.id);
   })
 });
 var settingsRouter = router({
@@ -1621,10 +1865,10 @@ async function findAvailablePort(startPort = 3e3) {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 async function startServer() {
-  const app = express2();
+  const app = express3();
   const server = createServer(app);
-  app.use(express2.json({ limit: "50mb" }));
-  app.use(express2.urlencoded({ limit: "50mb", extended: true }));
+  app.use(express3.json({ limit: "50mb" }));
+  app.use(express3.urlencoded({ limit: "50mb", extended: true }));
   registerTelegramRoutes(app);
   app.use(
     "/api/trpc",
@@ -1636,10 +1880,7 @@ async function startServer() {
   if (process.env.NODE_ENV !== "development") {
     serveStatic(app);
   } else {
-    const viteMod = await import(
-      /* @vite-ignore */
-      "./vite.js"
-    );
+    const viteMod = await Promise.resolve().then(() => (init_vite(), vite_exports));
     await viteMod.setupVite(app, server);
   }
   const preferredPort = parseInt(process.env.PORT || "3000");

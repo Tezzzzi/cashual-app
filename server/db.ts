@@ -7,10 +7,12 @@ import {
   transactions,
   familyGroups,
   familyGroupMembers,
+  familyPermissions,
   type InsertCategory,
   type InsertTransaction,
   type InsertFamilyGroup,
   type InsertFamilyGroupMember,
+  type InsertFamilyPermission,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -510,4 +512,146 @@ export async function isGroupMember(familyGroupId: number, userId: number): Prom
     )
     .limit(1);
   return result.length > 0;
+}
+
+// ─── Family Permissions ─────────────────────────────────────────────
+
+/**
+ * Get all permissions for a specific family group.
+ * Returns who has granted view access to whom.
+ */
+export async function getFamilyPermissions(familyGroupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(familyPermissions)
+    .where(eq(familyPermissions.familyGroupId, familyGroupId));
+}
+
+/**
+ * Get permissions that a specific user (grantor) has set.
+ * Shows who can see this user's expenses.
+ */
+export async function getMyPermissions(familyGroupId: number, grantorId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(familyPermissions)
+    .where(
+      and(
+        eq(familyPermissions.familyGroupId, familyGroupId),
+        eq(familyPermissions.grantorId, grantorId)
+      )
+    );
+}
+
+/**
+ * Set or update a permission: grantor allows/denies grantee to view expenses.
+ */
+export async function setFamilyPermission(
+  familyGroupId: number,
+  grantorId: number,
+  granteeId: number,
+  canViewExpenses: boolean
+) {
+  const db = await getDb();
+  if (!db) return;
+
+  // Check if permission already exists
+  const existing = await db
+    .select()
+    .from(familyPermissions)
+    .where(
+      and(
+        eq(familyPermissions.familyGroupId, familyGroupId),
+        eq(familyPermissions.grantorId, grantorId),
+        eq(familyPermissions.granteeId, granteeId)
+      )
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db
+      .update(familyPermissions)
+      .set({ canViewExpenses })
+      .where(eq(familyPermissions.id, existing[0].id));
+  } else {
+    await db.insert(familyPermissions).values({
+      familyGroupId,
+      grantorId,
+      granteeId,
+      canViewExpenses,
+    });
+  }
+}
+
+/**
+ * Get the list of user IDs whose expenses the given viewer can see
+ * within a specific family group.
+ * If no permissions are set for a grantor, default is VISIBLE (opt-out model).
+ */
+export async function getViewableUserIds(
+  familyGroupId: number,
+  viewerId: number
+): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [viewerId];
+
+  // Get all members of the group
+  const members = await db
+    .select({ userId: familyGroupMembers.userId })
+    .from(familyGroupMembers)
+    .where(eq(familyGroupMembers.familyGroupId, familyGroupId));
+
+  const allMemberIds = members.map((m) => m.userId);
+
+  // Get all permissions where the viewer is the grantee
+  const perms = await db
+    .select()
+    .from(familyPermissions)
+    .where(
+      and(
+        eq(familyPermissions.familyGroupId, familyGroupId),
+        eq(familyPermissions.granteeId, viewerId)
+      )
+    );
+
+  // Build a set of explicitly denied grantors
+  const deniedGrantors = new Set<number>();
+  for (const p of perms) {
+    if (!p.canViewExpenses) {
+      deniedGrantors.add(p.grantorId);
+    }
+  }
+
+  // Default: all members are visible unless explicitly denied
+  return allMemberIds.filter((id) => !deniedGrantors.has(id));
+}
+
+/**
+ * Initialize default permissions when a new member joins a family group.
+ * By default, all existing members grant the new member view access,
+ * and the new member grants all existing members view access.
+ */
+export async function initializePermissionsForNewMember(
+  familyGroupId: number,
+  newMemberId: number
+) {
+  const db = await getDb();
+  if (!db) return;
+
+  const members = await db
+    .select({ userId: familyGroupMembers.userId })
+    .from(familyGroupMembers)
+    .where(eq(familyGroupMembers.familyGroupId, familyGroupId));
+
+  for (const member of members) {
+    if (member.userId === newMemberId) continue;
+    // New member grants existing members access
+    await setFamilyPermission(familyGroupId, newMemberId, member.userId, true);
+    // Existing members grant new member access
+    await setFamilyPermission(familyGroupId, member.userId, newMemberId, true);
+  }
 }

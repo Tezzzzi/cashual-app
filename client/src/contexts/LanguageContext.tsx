@@ -94,7 +94,6 @@ const translations = {
     leave_confirm: "Покинуть группу?",
     leave_confirm_desc: "Вы покинете семейную группу. Ваши транзакции останутся.",
     leave_btn: "Покинуть",
-    group_created: "Группа создана",
     joined_group: "Вы вступили в группу",
     left_group: "Вы покинули группу",
     copied: "Скопировано!",
@@ -133,6 +132,31 @@ const translations = {
     scope_partner: "Партнёра",
     scope_all: "Все вместе",
     family_report_label: "Семейный отчёт",
+
+    // Family page (translated)
+    family_mode: "Семейный режим",
+    group_members: "Участники группы",
+    show_members: "Показать участников",
+    hide_members: "Скрыть участников",
+    member: "Участник",
+    no_family_groups: "Нет семейных групп",
+    create_or_join_hint: "Создайте группу или присоединитесь по коду приглашения",
+    group_name_placeholder: "Название группы",
+    leave_group_title: "Покинуть группу?",
+    leave_group_description: "Вы больше не сможете видеть семейные транзакции этой группы.",
+    group_created: "Группа создана!",
+    group_joined: "Вы присоединились к группе!",
+    group_left: "Вы покинули группу",
+    code_copied: "Код скопирован!",
+
+    // Permissions
+    show_permissions: "Настроить доступ",
+    hide_permissions: "Скрыть настройки доступа",
+    permissions_title: "Кто видит мои расходы",
+    permissions_description: "Управляйте тем, кто из участников группы может видеть ваши расходы в семейных отчётах.",
+    can_see_expenses: "Видит мои расходы",
+    cannot_see_expenses: "Не видит мои расходы",
+    permission_updated: "Настройки доступа обновлены",
 
     // Receipt
     scan_receipt: "Сканировать чек",
@@ -242,7 +266,6 @@ const translations = {
     leave_confirm: "Qrupdan çıxılsın?",
     leave_confirm_desc: "Siz ailə qrupundan çıxacaqsınız. Əməliyyatlarınız qalacaq.",
     leave_btn: "Çıx",
-    group_created: "Qrup yaradıldı",
     joined_group: "Qrupa qoşuldunuz",
     left_group: "Qrupdan çıxdınız",
     copied: "Kopyalandı!",
@@ -281,6 +304,31 @@ const translations = {
     scope_partner: "Partnerin",
     scope_all: "Hamısı birlikdə",
     family_report_label: "Ailə hesabatı",
+
+    // Family page (translated)
+    family_mode: "Ailə rejimi",
+    group_members: "Qrup üzvləri",
+    show_members: "Üzvləri göstər",
+    hide_members: "Üzvləri gizlət",
+    member: "Üzv",
+    no_family_groups: "Ailə qrupu yoxdur",
+    create_or_join_hint: "Yeni qrup yaradın və ya dəvət kodu ilə qoşulun",
+    group_name_placeholder: "Qrupun adı",
+    leave_group_title: "Qrupdan çıxılsın?",
+    leave_group_description: "Siz bu qrupun ailə əməliyyatlarını görə bilməyəcəksiniz.",
+    group_created: "Qrup yaradıldı!",
+    group_joined: "Qrupa qoşuldunuz!",
+    group_left: "Qrupdan çıxdınız",
+    code_copied: "Kod kopyalandı!",
+
+    // Permissions
+    show_permissions: "Girişi tənzimlə",
+    hide_permissions: "Giriş parametrlərini gizlət",
+    permissions_title: "Xərclərimə kim baxa bilər",
+    permissions_description: "Qrup üzvlərindən kimin ailə hesabatlarında xərclərinizi görə biləcəyini idarə edin.",
+    can_see_expenses: "Xərclərimə baxa bilər",
+    cannot_see_expenses: "Xərclərimə baxa bilməz",
+    permission_updated: "Giriş parametrləri yeniləndi",
 
     // Receipt
     scan_receipt: "Çeki skan et",
@@ -390,7 +438,6 @@ const translations = {
     leave_confirm: "Leave group?",
     leave_confirm_desc: "You will leave the family group. Your transactions will remain.",
     leave_btn: "Leave",
-    group_created: "Group created",
     joined_group: "You joined the group",
     left_group: "You left the group",
     copied: "Copied!",
@@ -429,6 +476,31 @@ const translations = {
     scope_partner: "Partner's",
     scope_all: "All together",
     family_report_label: "Family report",
+
+    // Family page (translated)
+    family_mode: "Family Mode",
+    group_members: "Group Members",
+    show_members: "Show Members",
+    hide_members: "Hide Members",
+    member: "Member",
+    no_family_groups: "No family groups",
+    create_or_join_hint: "Create a group or join with an invite code",
+    group_name_placeholder: "Group name",
+    leave_group_title: "Leave group?",
+    leave_group_description: "You will no longer see family transactions from this group.",
+    group_created: "Group created!",
+    group_joined: "You joined the group!",
+    group_left: "You left the group",
+    code_copied: "Code copied!",
+
+    // Permissions
+    show_permissions: "Manage Access",
+    hide_permissions: "Hide Access Settings",
+    permissions_title: "Who can see my expenses",
+    permissions_description: "Control which group members can see your expenses in family reports.",
+    can_see_expenses: "Can see my expenses",
+    cannot_see_expenses: "Cannot see my expenses",
+    permission_updated: "Access settings updated",
 
     // Receipt
     scan_receipt: "Scan Receipt",

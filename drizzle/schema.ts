@@ -94,3 +94,20 @@ export const familyGroupMembers = mysqlTable("familyGroupMembers", {
 
 export type FamilyGroupMember = typeof familyGroupMembers.$inferSelect;
 export type InsertFamilyGroupMember = typeof familyGroupMembers.$inferInsert;
+
+// ─── Family Permissions ─────────────────────────────────────────────
+// Controls who can see whose expenses within a family group.
+// grantor = the person whose expenses are being shared
+// grantee = the person who can view those expenses
+export const familyPermissions = mysqlTable("familyPermissions", {
+  id: int("id").autoincrement().primaryKey(),
+  familyGroupId: int("familyGroupId").notNull(),
+  grantorId: int("grantorId").notNull(), // user who owns the expenses
+  granteeId: int("granteeId").notNull(), // user who can view them
+  canViewExpenses: boolean("canViewExpenses").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type FamilyPermission = typeof familyPermissions.$inferSelect;
+export type InsertFamilyPermission = typeof familyPermissions.$inferInsert;

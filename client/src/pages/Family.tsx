@@ -3,6 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -27,28 +28,39 @@ import {
   LogOut,
   Loader2,
   Crown,
+  Eye,
+  EyeOff,
+  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Family() {
   const { isAuthenticated, user } = useAuth();
+  const { t } = useLanguage();
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [leavingGroupId, setLeavingGroupId] = useState<number | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [showPermissions, setShowPermissions] = useState(false);
 
   const { data: groups, isLoading } = trpc.family.myGroups.useQuery(undefined, {
     enabled: isAuthenticated,
   });
 
-  // User can only be in one family group at a time
   const hasGroup = groups && groups.length > 0;
 
   const { data: members } = trpc.family.members.useQuery(
     { familyGroupId: selectedGroupId! },
     { enabled: !!selectedGroupId }
+  );
+
+  // Permissions: who can see MY expenses
+  const { data: myPermissions } = trpc.family.myPermissions.useQuery(
+    { familyGroupId: selectedGroupId! },
+    { enabled: !!selectedGroupId && showPermissions }
   );
 
   const utils = trpc.useUtils();
@@ -58,7 +70,7 @@ export default function Family() {
       utils.family.myGroups.invalidate();
       setShowCreate(false);
       setGroupName("");
-      toast.success("Группа создана!");
+      toast.success(t("group_created"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -68,7 +80,7 @@ export default function Family() {
       utils.family.myGroups.invalidate();
       setShowJoin(false);
       setInviteCode("");
-      toast.success("Вы присоединились к группе!");
+      toast.success(t("group_joined"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -78,20 +90,36 @@ export default function Family() {
       utils.family.myGroups.invalidate();
       setLeavingGroupId(null);
       setSelectedGroupId(null);
-      toast.success("Вы покинули группу");
+      toast.success(t("group_left"));
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const setPermission = trpc.family.setPermission.useMutation({
+    onSuccess: () => {
+      utils.family.myPermissions.invalidate();
+      toast.success(t("permission_updated"));
     },
     onError: (err) => toast.error(err.message),
   });
 
   const copyInviteCode = (code: string) => {
     navigator.clipboard.writeText(code);
-    toast.success("Код скопирован!");
+    toast.success(t("code_copied"));
+  };
+
+  // Helper: check if a specific member can see my expenses
+  const canMemberSeeMyExpenses = (memberId: number): boolean => {
+    if (!myPermissions) return true; // default: visible
+    const perm = myPermissions.find((p) => p.granteeId === memberId);
+    if (!perm) return true; // no explicit permission = default visible
+    return perm.canViewExpenses;
   };
 
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-muted-foreground">Войдите для просмотра</p>
+        <p className="text-muted-foreground">{t("initializing")}</p>
       </div>
     );
   }
@@ -100,7 +128,7 @@ export default function Family() {
     <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Семейный режим</h1>
+        <h1 className="text-xl font-bold">{t("family_mode")}</h1>
         <div className="flex gap-2">
           {!hasGroup && (
             <Button
@@ -109,13 +137,13 @@ export default function Family() {
               onClick={() => setShowJoin(true)}
             >
               <UserPlus className="h-3.5 w-3.5 mr-1" />
-              Войти
+              {t("join_group")}
             </Button>
           )}
           {!hasGroup && (
             <Button size="sm" onClick={() => setShowCreate(true)}>
               <Plus className="h-3.5 w-3.5 mr-1" />
-              Создать
+              {t("create_group")}
             </Button>
           )}
         </div>
@@ -138,7 +166,7 @@ export default function Family() {
                   <div>
                     <p className="text-sm font-semibold">{g.group.name}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      Участники группы
+                      {t("group_members")}
                     </p>
                   </div>
                 </div>
@@ -154,7 +182,7 @@ export default function Family() {
 
               {/* Invite Code */}
               <div className="flex items-center gap-2 bg-secondary/50 rounded-lg px-3 py-2">
-                <span className="text-xs text-muted-foreground">Код:</span>
+                <span className="text-xs text-muted-foreground">{t("invite_code")}:</span>
                 <span className="text-sm font-mono font-bold flex-1">
                   {g.group.inviteCode}
                 </span>
@@ -173,15 +201,15 @@ export default function Family() {
                 variant="outline"
                 size="sm"
                 className="w-full"
-                onClick={() =>
-                  setSelectedGroupId(
-                    selectedGroupId === g.group.id ? null : g.group.id
-                  )
-                }
+                onClick={() => {
+                  const newId = selectedGroupId === g.group.id ? null : g.group.id;
+                  setSelectedGroupId(newId);
+                  if (!newId) setShowPermissions(false);
+                }}
               >
                 {selectedGroupId === g.group.id
-                  ? "Скрыть участников"
-                  : "Показать участников"}
+                  ? t("hide_members")
+                  : t("show_members")}
               </Button>
 
               {selectedGroupId === g.group.id && members && (
@@ -194,8 +222,8 @@ export default function Family() {
                       <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-xs">
                         {(m.user.telegramFirstName || m.user.name || "?")[0]}
                       </div>
-                      <span className="text-sm">
-                        {m.user.telegramFirstName || m.user.name || "Участник"}
+                      <span className="text-sm flex-1">
+                        {m.user.telegramFirstName || m.user.name || t("member")}
                       </span>
                       {m.member.userId === g.group.ownerId && (
                         <Crown className="h-3.5 w-3.5 text-yellow-500" />
@@ -204,15 +232,90 @@ export default function Family() {
                   ))}
                 </div>
               )}
+
+              {/* Permissions Button */}
+              {selectedGroupId === g.group.id && members && members.length > 1 && (
+                <Button
+                  variant={showPermissions ? "default" : "outline"}
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setShowPermissions(!showPermissions)}
+                >
+                  <Shield className="h-3.5 w-3.5 mr-1" />
+                  {showPermissions ? t("hide_permissions") : t("show_permissions")}
+                </Button>
+              )}
+
+              {/* Permissions Panel */}
+              {selectedGroupId === g.group.id && showPermissions && members && (
+                <div className="space-y-2 border-t pt-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield className="h-4 w-4 text-primary" />
+                    <p className="text-xs font-semibold text-primary">
+                      {t("permissions_title")}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mb-3">
+                    {t("permissions_description")}
+                  </p>
+
+                  {members
+                    .filter((m) => m.member.userId !== user?.id)
+                    .map((m) => {
+                      const canView = canMemberSeeMyExpenses(m.member.userId);
+                      return (
+                        <div
+                          key={m.member.id}
+                          className="flex items-center justify-between bg-secondary/30 rounded-lg px-3 py-2.5"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-xs">
+                              {(m.user.telegramFirstName || m.user.name || "?")[0]}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">
+                                {m.user.telegramFirstName || m.user.name || t("member")}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                {canView ? (
+                                  <>
+                                    <Eye className="h-3 w-3" />
+                                    {t("can_see_expenses")}
+                                  </>
+                                ) : (
+                                  <>
+                                    <EyeOff className="h-3 w-3" />
+                                    {t("cannot_see_expenses")}
+                                  </>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={canView}
+                            onCheckedChange={(checked) => {
+                              setPermission.mutate({
+                                familyGroupId: g.group.id,
+                                granteeId: m.member.userId,
+                                canViewExpenses: checked,
+                              });
+                            }}
+                            disabled={setPermission.isPending}
+                          />
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           ))}
         </div>
       ) : (
         <div className="tg-card text-center py-12">
           <Users className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm font-medium mb-1">Нет семейных групп</p>
+          <p className="text-sm font-medium mb-1">{t("no_family_groups")}</p>
           <p className="text-xs text-muted-foreground">
-            Создайте группу или присоединитесь по коду приглашения
+            {t("create_or_join_hint")}
           </p>
         </div>
       )}
@@ -221,11 +324,11 @@ export default function Family() {
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-md mx-auto">
           <DialogHeader>
-            <DialogTitle>Создать группу</DialogTitle>
+            <DialogTitle>{t("create_group")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <Input
-              placeholder="Название группы"
+              placeholder={t("group_name_placeholder")}
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               className="h-12"
@@ -238,7 +341,7 @@ export default function Family() {
               {createGroup.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                "Создать"
+                t("create_group")
               )}
             </Button>
           </div>
@@ -249,11 +352,11 @@ export default function Family() {
       <Dialog open={showJoin} onOpenChange={setShowJoin}>
         <DialogContent className="max-w-md mx-auto">
           <DialogHeader>
-            <DialogTitle>Присоединиться к группе</DialogTitle>
+            <DialogTitle>{t("join_group")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <Input
-              placeholder="Код приглашения"
+              placeholder={t("invite_code")}
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
               className="h-12 font-mono text-center text-lg tracking-wider"
@@ -267,7 +370,7 @@ export default function Family() {
               {joinGroup.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                "Присоединиться"
+                t("join_group")
               )}
             </Button>
           </div>
@@ -281,13 +384,13 @@ export default function Family() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Покинуть группу?</AlertDialogTitle>
+            <AlertDialogTitle>{t("leave_group_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Вы больше не сможете видеть семейные транзакции этой группы.
+              {t("leave_group_description")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground"
               onClick={() => {
@@ -295,7 +398,7 @@ export default function Family() {
                   leaveGroup.mutate({ familyGroupId: leavingGroupId });
               }}
             >
-              Покинуть
+              {t("leave_group")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
