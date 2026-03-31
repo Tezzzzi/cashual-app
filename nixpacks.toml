@@ -1,2 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_20", "pnpm-9_x", "openssl"]
+
+[phases.install]
+cmds = ["npm install -g corepack@0.24.1 && corepack enable", "pnpm i --frozen-lockfile"]
+
 [phases.build]
 cmds = ["rm -rf node_modules/.pnpm/jose* node_modules/jose && pnpm install --frozen-lockfile && vite build && esbuild server/_core/index.ts --platform=node --packages=external --external:./vite --external:./vite.js --external:../../vite.config --bundle --format=esm --outdir=dist"]
+
+[start]
+cmd = "NODE_ENV=production node --input-type=module --eval \"import { webcrypto } from 'crypto'; if (!globalThis.crypto) { globalThis.crypto = webcrypto; } import('./dist/index.js');\""
