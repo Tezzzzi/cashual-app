@@ -81,6 +81,7 @@ const transactionsRouter = router({
           categoryId: z.number().optional(),
           limit: z.number().min(1).max(500).default(100),
           offset: z.number().min(0).default(0),
+          scope: z.enum(["mine", "partner", "all"]).optional(),
         })
         .optional()
     )
@@ -89,6 +90,21 @@ const transactionsRouter = router({
         const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
         if (!isMember) throw new TRPCError({ code: "FORBIDDEN", message: "Not a group member" });
       }
+
+      // Handle family scope filtering (same logic as reports)
+      if (input?.scope && input.scope !== "mine" && input?.familyGroupId) {
+        const viewableIds = await getViewableUserIds(ctx.user.id, input.familyGroupId);
+        let userIds: number[];
+        if (input.scope === "partner") {
+          userIds = viewableIds.filter((id) => id !== ctx.user.id);
+        } else {
+          // "all" — current user + viewable members
+          userIds = Array.from(new Set([ctx.user.id, ...viewableIds]));
+        }
+        if (userIds.length === 0) userIds = [ctx.user.id];
+        return getTransactions(ctx.user.id, { ...input, userIds });
+      }
+
       return getTransactions(ctx.user.id, input ?? undefined);
     }),
 

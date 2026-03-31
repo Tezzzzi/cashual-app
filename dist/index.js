@@ -456,7 +456,9 @@ async function getTransactions(userId, opts) {
   const db = await getDb();
   if (!db) return [];
   const conditions = [];
-  if (opts?.familyGroupId) {
+  if (opts?.userIds && opts.userIds.length > 0) {
+    conditions.push(inArray(transactions.userId, opts.userIds));
+  } else if (opts?.familyGroupId) {
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else if (opts?.isFamily === false) {
@@ -1192,12 +1194,24 @@ var transactionsRouter = router({
       type: z2.enum(["income", "expense"]).optional(),
       categoryId: z2.number().optional(),
       limit: z2.number().min(1).max(500).default(100),
-      offset: z2.number().min(0).default(0)
+      offset: z2.number().min(0).default(0),
+      scope: z2.enum(["mine", "partner", "all"]).optional()
     }).optional()
   ).query(async ({ ctx, input }) => {
     if (input?.familyGroupId) {
       const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
       if (!isMember) throw new TRPCError3({ code: "FORBIDDEN", message: "Not a group member" });
+    }
+    if (input?.scope && input.scope !== "mine" && input?.familyGroupId) {
+      const viewableIds = await getViewableUserIds(ctx.user.id, input.familyGroupId);
+      let userIds;
+      if (input.scope === "partner") {
+        userIds = viewableIds.filter((id) => id !== ctx.user.id);
+      } else {
+        userIds = Array.from(/* @__PURE__ */ new Set([ctx.user.id, ...viewableIds]));
+      }
+      if (userIds.length === 0) userIds = [ctx.user.id];
+      return getTransactions(ctx.user.id, { ...input, userIds });
     }
     return getTransactions(ctx.user.id, input ?? void 0);
   }),

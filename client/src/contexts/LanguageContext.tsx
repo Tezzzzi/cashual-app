@@ -132,6 +132,7 @@ const translations = {
     scope_partner: "Партнёра",
     scope_all: "Все вместе",
     family_report_label: "Семейный отчёт",
+    family_transactions_label: "Семейные транзакции",
 
     // Family page (translated)
     family_mode: "Семейный режим",
@@ -304,6 +305,7 @@ const translations = {
     scope_partner: "Partnerin",
     scope_all: "Hamısı birlikdə",
     family_report_label: "Ailə hesabatı",
+    family_transactions_label: "Ailə əməliyyatları",
 
     // Family page (translated)
     family_mode: "Ailə rejimi",
@@ -476,6 +478,7 @@ const translations = {
     scope_partner: "Partner's",
     scope_all: "All together",
     family_report_label: "Family report",
+    family_transactions_label: "Family transactions",
 
     // Family page (translated)
     family_mode: "Family Mode",

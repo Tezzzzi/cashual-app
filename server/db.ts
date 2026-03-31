@@ -210,6 +210,7 @@ export async function getTransactions(
     categoryId?: number;
     limit?: number;
     offset?: number;
+    userIds?: number[];
   }
 ) {
   const db = await getDb();
@@ -217,7 +218,10 @@ export async function getTransactions(
 
   const conditions = [];
 
-  if (opts?.familyGroupId) {
+  if (opts?.userIds && opts.userIds.length > 0) {
+    // Multi-user family query: filter by specific user IDs
+    conditions.push(inArray(transactions.userId, opts.userIds));
+  } else if (opts?.familyGroupId) {
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else if (opts?.isFamily === false) {
