@@ -1,3 +1,116 @@
+var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// server/_core/env.ts
+var ENV;
+var init_env = __esm({
+  "server/_core/env.ts"() {
+    "use strict";
+    ENV = {
+      appId: process.env.VITE_APP_ID ?? "",
+      cookieSecret: process.env.JWT_SECRET ?? "",
+      databaseUrl: process.env.DATABASE_URL ?? "",
+      oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
+      ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+      isProduction: process.env.NODE_ENV === "production",
+      forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
+      forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+      // Telegram & OpenAI
+      telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+      openaiApiKey: process.env.OPENAI_API_KEY ?? ""
+    };
+  }
+});
+
+// server/storage.ts
+var storage_exports = {};
+__export(storage_exports, {
+  storageGet: () => storageGet,
+  storagePut: () => storagePut
+});
+function getStorageConfig() {
+  const baseUrl = ENV.forgeApiUrl;
+  const apiKey = ENV.forgeApiKey;
+  if (!baseUrl || !apiKey) {
+    throw new Error(
+      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
+    );
+  }
+  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
+}
+function buildUploadUrl(baseUrl, relKey) {
+  const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
+  url.searchParams.set("path", normalizeKey(relKey));
+  return url;
+}
+async function buildDownloadUrl(baseUrl, relKey, apiKey) {
+  const downloadApiUrl = new URL(
+    "v1/storage/downloadUrl",
+    ensureTrailingSlash(baseUrl)
+  );
+  downloadApiUrl.searchParams.set("path", normalizeKey(relKey));
+  const response = await fetch(downloadApiUrl, {
+    method: "GET",
+    headers: buildAuthHeaders(apiKey)
+  });
+  return (await response.json()).url;
+}
+function ensureTrailingSlash(value) {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+function normalizeKey(relKey) {
+  return relKey.replace(/^\/+/, "");
+}
+function toFormData(data, contentType, fileName) {
+  const blob = typeof data === "string" ? new Blob([data], { type: contentType }) : new Blob([data], { type: contentType });
+  const form = new FormData();
+  form.append("file", blob, fileName || "file");
+  return form;
+}
+function buildAuthHeaders(apiKey) {
+  return { Authorization: `Bearer ${apiKey}` };
+}
+async function storagePut(relKey, data, contentType = "application/octet-stream") {
+  const { baseUrl, apiKey } = getStorageConfig();
+  const key = normalizeKey(relKey);
+  const uploadUrl = buildUploadUrl(baseUrl, key);
+  const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: buildAuthHeaders(apiKey),
+    body: formData
+  });
+  if (!response.ok) {
+    const message = await response.text().catch(() => response.statusText);
+    throw new Error(
+      `Storage upload failed (${response.status} ${response.statusText}): ${message}`
+    );
+  }
+  const url = (await response.json()).url;
+  return { key, url };
+}
+async function storageGet(relKey) {
+  const { baseUrl, apiKey } = getStorageConfig();
+  const key = normalizeKey(relKey);
+  return {
+    key,
+    url: await buildDownloadUrl(baseUrl, key, apiKey)
+  };
+}
+var init_storage = __esm({
+  "server/storage.ts"() {
+    "use strict";
+    init_env();
+  }
+});
+
 // server/_core/index.ts
 import "dotenv/config";
 import express2 from "express";
@@ -40,6 +153,7 @@ var users = mysqlTable("users", {
   telegramPhotoUrl: text("telegramPhotoUrl"),
   preferredLanguage: varchar("preferredLanguage", { length: 10 }).default("ru"),
   preferredCurrency: varchar("preferredCurrency", { length: 10 }).default("AZN"),
+  defaultBudget: mysqlEnum("defaultBudget", ["personal", "family"]).default("personal"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
@@ -90,22 +204,8 @@ var familyGroupMembers = mysqlTable("familyGroupMembers", {
   joinedAt: timestamp("joinedAt").defaultNow().notNull()
 });
 
-// server/_core/env.ts
-var ENV = {
-  appId: process.env.VITE_APP_ID ?? "",
-  cookieSecret: process.env.JWT_SECRET ?? "",
-  databaseUrl: process.env.DATABASE_URL ?? "",
-  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
-  ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
-  isProduction: process.env.NODE_ENV === "production",
-  forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
-  forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
-  // Telegram & OpenAI
-  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
-  openaiApiKey: process.env.OPENAI_API_KEY ?? ""
-};
-
 // server/db.ts
+init_env();
 var _db = null;
 async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -288,7 +388,6 @@ async function getReportSummary(userId, opts) {
     conditions.push(eq(transactions.isFamily, true));
   } else {
     conditions.push(eq(transactions.userId, userId));
-    conditions.push(eq(transactions.isFamily, false));
   }
   if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
   if (opts?.endDate) conditions.push(lte(transactions.date, opts.endDate));
@@ -313,7 +412,6 @@ async function getReportByCategory(userId, opts) {
     conditions.push(eq(transactions.isFamily, true));
   } else {
     conditions.push(eq(transactions.userId, userId));
-    conditions.push(eq(transactions.isFamily, false));
   }
   if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
   if (opts?.endDate) conditions.push(lte(transactions.date, opts.endDate));
@@ -388,6 +486,7 @@ async function isGroupMember(familyGroupId, userId) {
 }
 
 // server/_core/telegram-auth.ts
+init_env();
 var ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1e3;
 function validateTelegramInitData(initData) {
   try {
@@ -575,6 +674,7 @@ function getSessionCookieOptions(req) {
 import { z } from "zod";
 
 // server/_core/notification.ts
+init_env();
 import { TRPCError } from "@trpc/server";
 var TITLE_MAX_LENGTH = 1200;
 var CONTENT_MAX_LENGTH = 2e4;
@@ -720,6 +820,7 @@ import { z as z2 } from "zod";
 import { nanoid } from "nanoid";
 
 // server/_core/openai-whisper.ts
+init_env();
 async function transcribeAudio(options) {
   try {
     const apiUrl = getTranscriptionApiUrl();
@@ -819,6 +920,7 @@ function getFileExtension(mimeType) {
 }
 
 // server/_core/openai-llm.ts
+init_env();
 function getLLMApiUrl() {
   if (ENV.forgeApiUrl && ENV.forgeApiKey) {
     const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
@@ -1063,6 +1165,96 @@ Rules:
     }
     const audioId = nanoid();
     return { audioId, size: buffer.length };
+  }),
+  // ─── Receipt / Screenshot Recognition ─────────────────────────────
+  parseReceipt: protectedProcedure.input(
+    z2.object({
+      imageBase64: z2.string(),
+      mimeType: z2.string().default("image/jpeg")
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const buffer = Buffer.from(input.imageBase64, "base64");
+    const sizeMB = buffer.length / (1024 * 1024);
+    if (sizeMB > 10) {
+      throw new TRPCError3({ code: "BAD_REQUEST", message: "Image too large (max 10MB)" });
+    }
+    const { storagePut: storagePut2 } = await Promise.resolve().then(() => (init_storage(), storage_exports));
+    const fileKey = `receipts/${ctx.user.id}-${nanoid()}.jpg`;
+    const { url: imageUrl } = await storagePut2(fileKey, buffer, input.mimeType);
+    const userCategories = await getCategories(ctx.user.id);
+    const categoryNames = userCategories.map((c) => c.name).join(", ");
+    const now = /* @__PURE__ */ new Date();
+    const llmResult = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `You are a financial receipt/transaction parser. Analyze the provided image (receipt, bank screenshot, or transaction notification) and extract structured transaction data.
+
+Available categories: ${categoryNames}
+Current date: ${now.toISOString()}
+User's preferred currency: ${ctx.user.preferredCurrency || "AZN"}
+
+Rules:
+- Identify if it's an expense or income
+- Extract the total amount (the final amount paid, not subtotals)
+- Detect the currency from the receipt (default: ${ctx.user.preferredCurrency || "AZN"})
+- Match to the closest available category
+- Extract merchant name or description
+- Extract the date from the receipt if visible, otherwise use today
+- If multiple items, use the total
+- For bank screenshots, extract the transaction amount and merchant`
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: imageUrl, detail: "high" }
+            },
+            {
+              type: "text",
+              text: "Parse this receipt/transaction image into a structured financial transaction."
+            }
+          ]
+        }
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "parsed_receipt",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["income", "expense"], description: "Transaction type" },
+              amount: { type: "number", description: "Transaction amount" },
+              currency: { type: "string", description: "Currency code (AZN, USD, EUR, RUB, etc.)" },
+              categoryName: { type: "string", description: "Best matching category name from the available list" },
+              description: { type: "string", description: "Merchant name or short description" },
+              date: { type: "number", description: "Unix timestamp in milliseconds" },
+              confidence: { type: "string", enum: ["high", "medium", "low"], description: "Confidence level of the extraction" }
+            },
+            required: ["type", "amount", "currency", "categoryName", "description", "date", "confidence"],
+            additionalProperties: false
+          }
+        }
+      }
+    });
+    const content = llmResult.choices[0]?.message?.content;
+    if (!content || typeof content !== "string") {
+      throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "Failed to parse receipt" });
+    }
+    const parsed = JSON.parse(content);
+    const matchedCategory = userCategories.find((c) => c.name.toLowerCase() === parsed.categoryName.toLowerCase()) || userCategories.find((c) => c.name.toLowerCase().includes(parsed.categoryName.toLowerCase())) || userCategories[userCategories.length - 1];
+    return {
+      parsed: {
+        ...parsed,
+        categoryId: matchedCategory?.id,
+        categoryName: matchedCategory?.name || parsed.categoryName,
+        categoryIcon: matchedCategory?.icon || "\u{1F4E6}"
+      },
+      imageUrl
+    };
   })
 });
 var reportsRouter = router({
@@ -1164,7 +1356,8 @@ var settingsRouter = router({
   update: protectedProcedure.input(
     z2.object({
       preferredLanguage: z2.string().optional(),
-      preferredCurrency: z2.string().optional()
+      preferredCurrency: z2.string().optional(),
+      defaultBudget: z2.enum(["personal", "family"]).optional()
     })
   ).mutation(async ({ ctx, input }) => {
     await updateUserTelegram(ctx.user.id, input);
