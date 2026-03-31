@@ -1061,11 +1061,15 @@ var familyRouter = router({
   }),
   create: protectedProcedure.input(z2.object({ name: z2.string().min(1).max(128) })).mutation(async ({ ctx, input }) => {
     const inviteCode = nanoid(8).toUpperCase();
-    return createFamilyGroup({
+    const result = await createFamilyGroup({
       name: input.name,
       inviteCode,
       ownerId: ctx.user.id
     });
+    if (result) {
+      await joinFamilyGroup(result.id, ctx.user.id);
+    }
+    return result;
   }),
   join: protectedProcedure.input(z2.object({ inviteCode: z2.string().min(1) })).mutation(async ({ ctx, input }) => {
     const group = await getFamilyGroupByInviteCode(input.inviteCode.toUpperCase());

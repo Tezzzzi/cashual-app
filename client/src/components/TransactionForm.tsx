@@ -24,6 +24,8 @@ type TransactionFormProps = {
     date?: number;
     isFamily?: boolean;
     familyGroupId?: number | null;
+    sourceLanguage?: string;
+    rawTranscription?: string;
   };
   onSuccess?: () => void;
   onCancel?: () => void;
@@ -127,6 +129,8 @@ export default function TransactionForm({
         date: dateTimestamp,
         isFamily,
         familyGroupId: isFamily && familyGroupId ? parseInt(familyGroupId) : null,
+        sourceLanguage: initialData?.sourceLanguage,
+        rawTranscription: initialData?.rawTranscription,
       });
     }
   };

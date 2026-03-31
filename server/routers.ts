@@ -353,11 +353,16 @@ const familyRouter = router({
     .input(z.object({ name: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       const inviteCode = nanoid(8).toUpperCase();
-      return createFamilyGroup({
+      const result = await createFamilyGroup({
         name: input.name,
         inviteCode,
         ownerId: ctx.user.id,
       });
+      // Auto-add the creator as a member so the group appears in myGroups
+      if (result) {
+        await joinFamilyGroup(result.id, ctx.user.id);
+      }
+      return result;
     }),
 
   join: protectedProcedure

@@ -248,6 +248,8 @@ export default function Home() {
                     categoryId: voiceResult.parsed.categoryId,
                     description: voiceResult.parsed.description,
                     date: voiceResult.parsed.date,
+                    sourceLanguage: voiceResult.language || voiceResult.parsed.language,
+                    rawTranscription: voiceResult.rawTranscription || voiceResult.transcription,
                   }
                 : undefined
             }
