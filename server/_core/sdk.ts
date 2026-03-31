@@ -3,7 +3,7 @@ import { ForbiddenError } from "@shared/_core/errors";
 import axios, { type AxiosInstance } from "axios";
 import { parse as parseCookieHeader } from "cookie";
 import type { Request } from "express";
-import { SignJWT, jwtVerify } from "jose";
+import jwt from "jsonwebtoken";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
@@ -154,20 +154,19 @@ class SDKServer {
     return new Map(Object.entries(parsed));
   }
 
-  private getSessionSecret() {
-    const secret = ENV.cookieSecret;
-    return new TextEncoder().encode(secret);
+  private getSessionSecret(): string {
+    return ENV.cookieSecret;
   }
 
   /**
    * Create a session token for a Manus user openId
    * @example
-   * const sessionToken = await sdk.createSessionToken(userInfo.openId);
+   * const sessionToken = sdk.createSessionToken(userInfo.openId);
    */
-  async createSessionToken(
+  createSessionToken(
     openId: string,
     options: { expiresInMs?: number; name?: string } = {}
-  ): Promise<string> {
+  ): string {
     return this.signSession(
       {
         openId,
@@ -178,28 +177,28 @@ class SDKServer {
     );
   }
 
-  async signSession(
+  signSession(
     payload: SessionPayload,
     options: { expiresInMs?: number } = {}
-  ): Promise<string> {
-    const issuedAt = Date.now();
+  ): string {
     const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
-    const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
+    const expiresInSeconds = Math.floor(expiresInMs / 1000);
     const secretKey = this.getSessionSecret();
 
-    return new SignJWT({
-      openId: payload.openId,
-      appId: payload.appId,
-      name: payload.name,
-    })
-      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-      .setExpirationTime(expirationSeconds)
-      .sign(secretKey);
+    return jwt.sign(
+      {
+        openId: payload.openId,
+        appId: payload.appId,
+        name: payload.name,
+      },
+      secretKey,
+      { expiresIn: expiresInSeconds, algorithm: "HS256" }
+    );
   }
 
-  async verifySession(
+  verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string } | null> {
+  ): { openId: string; appId: string; name: string } | null {
     if (!cookieValue) {
       console.warn("[Auth] Missing session cookie");
       return null;
@@ -207,10 +206,10 @@ class SDKServer {
 
     try {
       const secretKey = this.getSessionSecret();
-      const { payload } = await jwtVerify(cookieValue, secretKey, {
+      const decoded = jwt.verify(cookieValue, secretKey, {
         algorithms: ["HS256"],
-      });
-      const { openId, appId, name } = payload as Record<string, unknown>;
+      }) as Record<string, unknown>;
+      const { openId, appId, name } = decoded;
 
       if (
         !isNonEmptyString(openId) ||
@@ -260,7 +259,7 @@ class SDKServer {
     // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
-    const session = await this.verifySession(sessionCookie);
+    const session = this.verifySession(sessionCookie);
 
     if (!session) {
       throw ForbiddenError("Invalid session cookie");
