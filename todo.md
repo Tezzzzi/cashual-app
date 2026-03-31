@@ -69,4 +69,15 @@
 
 ## New Feature Requests
 - [ ] Limit users to one family budget (cannot create if already in a group)
-- [ ] Default all transactions to family budget when user has a family group
+- [x] Default all transactions to family budget when user has a family group
+- [x] Limit users to one family budget (cannot create if already in a group)
+
+## Bug Fixes (Round 2)
+- [x] Fix reports tab showing empty data
+- [x] Fix main balance showing 0 despite having transactions
+- [x] Fix language switching not working (interface stays in Russian)
+
+## New Features (Round 2)
+- [x] New professional logo (clean, modern, finance-oriented, not casino-like)
+- [x] Default budget preference setting (personal vs family toggle that persists)
+- [x] Receipt/screenshot recognition via vision AI (camera capture, OCR parsing, auto-fill transaction)

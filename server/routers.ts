@@ -263,7 +263,113 @@ Rules:
       // Return a temporary ID for the audio (stored in memory during transcription)
       const audioId = nanoid();
       return { audioId, size: buffer.length };
-    })
+    }),
+
+  // ─── Receipt / Screenshot Recognition ─────────────────────────────
+  parseReceipt: protectedProcedure
+    .input(
+      z.object({
+        imageBase64: z.string(),
+        mimeType: z.string().default("image/jpeg"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const buffer = Buffer.from(input.imageBase64, "base64");
+      const sizeMB = buffer.length / (1024 * 1024);
+      if (sizeMB > 10) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Image too large (max 10MB)" });
+      }
+
+      // Upload image to S3 for LLM access
+      const { storagePut } = await import("./storage");
+      const fileKey = `receipts/${ctx.user.id}-${nanoid()}.jpg`;
+      const { url: imageUrl } = await storagePut(fileKey, buffer, input.mimeType);
+
+      // Get user's categories for context
+      const userCategories = await getCategories(ctx.user.id);
+      const categoryNames = userCategories.map((c) => c.name).join(", ");
+
+      const now = new Date();
+      const llmResult = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are a financial receipt/transaction parser. Analyze the provided image (receipt, bank screenshot, or transaction notification) and extract structured transaction data.
+
+Available categories: ${categoryNames}
+Current date: ${now.toISOString()}
+User's preferred currency: ${ctx.user.preferredCurrency || "AZN"}
+
+Rules:
+- Identify if it's an expense or income
+- Extract the total amount (the final amount paid, not subtotals)
+- Detect the currency from the receipt (default: ${ctx.user.preferredCurrency || "AZN"})
+- Match to the closest available category
+- Extract merchant name or description
+- Extract the date from the receipt if visible, otherwise use today
+- If multiple items, use the total
+- For bank screenshots, extract the transaction amount and merchant`,
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: { url: imageUrl, detail: "high" },
+              },
+              {
+                type: "text",
+                text: "Parse this receipt/transaction image into a structured financial transaction.",
+              },
+            ],
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "parsed_receipt",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ["income", "expense"], description: "Transaction type" },
+                amount: { type: "number", description: "Transaction amount" },
+                currency: { type: "string", description: "Currency code (AZN, USD, EUR, RUB, etc.)" },
+                categoryName: { type: "string", description: "Best matching category name from the available list" },
+                description: { type: "string", description: "Merchant name or short description" },
+                date: { type: "number", description: "Unix timestamp in milliseconds" },
+                confidence: { type: "string", enum: ["high", "medium", "low"], description: "Confidence level of the extraction" },
+              },
+              required: ["type", "amount", "currency", "categoryName", "description", "date", "confidence"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+
+      const content = llmResult.choices[0]?.message?.content;
+      if (!content || typeof content !== "string") {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to parse receipt" });
+      }
+
+      const parsed = JSON.parse(content);
+
+      // Match category
+      const matchedCategory =
+        userCategories.find((c) => c.name.toLowerCase() === parsed.categoryName.toLowerCase()) ||
+        userCategories.find((c) => c.name.toLowerCase().includes(parsed.categoryName.toLowerCase())) ||
+        userCategories[userCategories.length - 1];
+
+      return {
+        parsed: {
+          ...parsed,
+          categoryId: matchedCategory?.id,
+          categoryName: matchedCategory?.name || parsed.categoryName,
+          categoryIcon: matchedCategory?.icon || "📦",
+        },
+        imageUrl,
+      };
+    }),
 });
 
 // ─── Reports Router ──────────────────────────────────────────────────
@@ -405,6 +511,7 @@ const settingsRouter = router({
       z.object({
         preferredLanguage: z.string().optional(),
         preferredCurrency: z.string().optional(),
+        defaultBudget: z.enum(["personal", "family"]).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

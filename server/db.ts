@@ -270,11 +270,12 @@ export async function getReportSummary(
   const conditions = [];
 
   if (opts?.familyGroupId) {
+    // Filter by specific family group
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else {
+    // Show ALL transactions belonging to this user (personal + family)
     conditions.push(eq(transactions.userId, userId));
-    conditions.push(eq(transactions.isFamily, false));
   }
 
   if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
@@ -309,11 +310,12 @@ export async function getReportByCategory(
   const conditions = [];
 
   if (opts?.familyGroupId) {
+    // Filter by specific family group
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else {
+    // Show ALL transactions belonging to this user (personal + family)
     conditions.push(eq(transactions.userId, userId));
-    conditions.push(eq(transactions.isFamily, false));
   }
 
   if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
@@ -346,11 +348,12 @@ export async function getReportByPeriod(
   const conditions = [];
 
   if (opts?.familyGroupId) {
+    // Filter by specific family group
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else {
+    // Show ALL transactions belonging to this user (personal + family)
     conditions.push(eq(transactions.userId, userId));
-    conditions.push(eq(transactions.isFamily, false));
   }
 
   if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));

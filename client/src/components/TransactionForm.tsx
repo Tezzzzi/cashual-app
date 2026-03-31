@@ -12,6 +12,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { ArrowDownCircle, ArrowUpCircle, Loader2 } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 type TransactionFormProps = {
   initialData?: {
@@ -37,6 +38,7 @@ export default function TransactionForm({
   onCancel,
 }: TransactionFormProps) {
   const isEditing = !!initialData?.id;
+  const { t } = useLanguage();
 
   const [type, setType] = useState<"income" | "expense">(
     initialData?.type || "expense"
@@ -64,29 +66,31 @@ export default function TransactionForm({
 
   const { data: categories } = trpc.categories.list.useQuery();
   const { data: familyGroups } = trpc.family.myGroups.useQuery();
+  const { data: currentUser } = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
 
-  // Once familyGroups loads, default to family budget if user has a group
-  // and no explicit initialData override was provided
+  // Once familyGroups and user settings load, apply the default budget preference
   useEffect(() => {
     if (!familyGroups || familyGroups.length === 0) return;
     const firstGroup = familyGroups[0].group;
     // Only set defaults if not already set from initialData
     if (initialData?.isFamily === undefined) {
-      setIsFamily(true);
+      // Use user's defaultBudget preference (defaults to 'personal' if not set)
+      const defaultToFamily = currentUser?.defaultBudget === "family";
+      setIsFamily(defaultToFamily);
     }
     if (!initialData?.familyGroupId && !familyGroupId) {
       setFamilyGroupId(firstGroup.id.toString());
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [familyGroups]);
+  }, [familyGroups, currentUser?.defaultBudget]);
 
   const createMutation = trpc.transactions.create.useMutation({
     onSuccess: () => {
       utils.transactions.list.invalidate();
       utils.reports.summary.invalidate();
       utils.reports.byCategory.invalidate();
-      toast.success("Транзакция добавлена");
+      toast.success(t("transaction_added"));
       onSuccess?.();
     },
     onError: (err) => toast.error(err.message),
@@ -97,7 +101,7 @@ export default function TransactionForm({
       utils.transactions.list.invalidate();
       utils.reports.summary.invalidate();
       utils.reports.byCategory.invalidate();
-      toast.success("Транзакция обновлена");
+      toast.success(t("transaction_updated"));
       onSuccess?.();
     },
     onError: (err) => toast.error(err.message),
@@ -162,7 +166,7 @@ export default function TransactionForm({
           onClick={() => setType("expense")}
         >
           <ArrowDownCircle className="h-4 w-4 mr-2" />
-          Расход
+          {t("expense")}
         </Button>
         <Button
           variant={type === "income" ? "default" : "outline"}
@@ -170,14 +174,14 @@ export default function TransactionForm({
           onClick={() => setType("income")}
         >
           <ArrowUpCircle className="h-4 w-4 mr-2" />
-          Доход
+          {t("income_btn")}
         </Button>
       </div>
 
       {/* Amount + Currency */}
       <div className="flex gap-2">
         <div className="flex-1">
-          <Label className="text-xs text-muted-foreground mb-1">Сумма</Label>
+          <Label className="text-xs text-muted-foreground mb-1">{t("amount")}</Label>
           <Input
             type="number"
             placeholder="0.00"
@@ -188,7 +192,7 @@ export default function TransactionForm({
           />
         </div>
         <div className="w-24">
-          <Label className="text-xs text-muted-foreground mb-1">Валюта</Label>
+          <Label className="text-xs text-muted-foreground mb-1">{t("currency")}</Label>
           <Select value={currency} onValueChange={setCurrency}>
             <SelectTrigger className="h-12">
               <SelectValue />
@@ -207,10 +211,10 @@ export default function TransactionForm({
 
       {/* Category */}
       <div>
-        <Label className="text-xs text-muted-foreground mb-1">Категория</Label>
+        <Label className="text-xs text-muted-foreground mb-1">{t("category")}</Label>
         <Select value={categoryId} onValueChange={setCategoryId}>
           <SelectTrigger className="h-12">
-            <SelectValue placeholder="Выберите категорию" />
+            <SelectValue placeholder={t("select_category")} />
           </SelectTrigger>
           <SelectContent>
             {filteredCategories.map((c) => (
@@ -227,9 +231,9 @@ export default function TransactionForm({
 
       {/* Description */}
       <div>
-        <Label className="text-xs text-muted-foreground mb-1">Описание</Label>
+        <Label className="text-xs text-muted-foreground mb-1">{t("description")}</Label>
         <Input
-          placeholder="Описание транзакции"
+          placeholder={t("description_placeholder")}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           className="h-12"
@@ -238,7 +242,7 @@ export default function TransactionForm({
 
       {/* Date */}
       <div>
-        <Label className="text-xs text-muted-foreground mb-1">Дата</Label>
+        <Label className="text-xs text-muted-foreground mb-1">{t("date")}</Label>
         <Input
           type="date"
           value={dateStr}
@@ -256,20 +260,20 @@ export default function TransactionForm({
               size="sm"
               onClick={() => setIsFamily(false)}
             >
-              Личное
+              {t("personal")}
             </Button>
             <Button
               variant={isFamily ? "default" : "outline"}
               size="sm"
               onClick={() => setIsFamily(true)}
             >
-              Семейное
+              {t("family")}
             </Button>
           </div>
           {isFamily && (
             <Select value={familyGroupId} onValueChange={setFamilyGroupId}>
               <SelectTrigger className="h-12">
-                <SelectValue placeholder="Выберите группу" />
+                <SelectValue placeholder={t("select_group")} />
               </SelectTrigger>
               <SelectContent>
                 {familyGroups.map((fg) => (
@@ -287,7 +291,7 @@ export default function TransactionForm({
       <div className="flex gap-2 pt-2">
         {onCancel && (
           <Button variant="outline" className="flex-1 h-12" onClick={onCancel}>
-            Отмена
+            {t("cancel")}
           </Button>
         )}
         <Button
@@ -298,9 +302,9 @@ export default function TransactionForm({
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : isEditing ? (
-            "Сохранить"
+            t("save")
           ) : (
-            "Добавить"
+            t("add")
           )}
         </Button>
       </div>

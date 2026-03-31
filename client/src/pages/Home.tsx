@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useTelegramAuth } from "@/_core/hooks/useTelegramAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -15,15 +15,21 @@ import {
   Plus,
   Loader2,
   AlertCircle,
+  ScanLine,
 } from "lucide-react";
 
 import VoiceRecorder from "@/components/VoiceRecorder";
 import TransactionForm from "@/components/TransactionForm";
+import ReceiptScanner from "@/components/ReceiptScanner";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Home() {
   const { user, loading, isAuthenticated, error, authState } = useTelegramAuth();
+  const { t } = useLanguage();
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showReceiptScanner, setShowReceiptScanner] = useState(false);
   const [voiceResult, setVoiceResult] = useState<any>(null);
+  const utils = trpc.useUtils();
 
   const { data: summary, isLoading: summaryLoading } =
     trpc.reports.summary.useQuery(undefined, { enabled: isAuthenticated });
@@ -44,7 +50,7 @@ export default function Home() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Инициализация...</p>
+        <p className="text-sm text-muted-foreground">{t("initializing")}</p>
       </div>
     );
   }
@@ -59,7 +65,7 @@ export default function Home() {
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold">CA$HUAL</h1>
           <p className="text-muted-foreground text-sm">
-            Голосовой финансовый трекер
+            {t("voice_finance_tracker")}
           </p>
         </div>
         {error ? (
@@ -69,7 +75,7 @@ export default function Home() {
           </div>
         ) : null}
         <p className="text-xs text-muted-foreground text-center max-w-xs">
-          Откройте приложение через Telegram бота{" "}
+          {t("open_via_telegram")}{" "}
           <span className="text-primary font-medium">@cashua_appl_bot</span>
         </p>
       </div>
@@ -81,7 +87,7 @@ export default function Home() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-6">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Авторизация...</p>
+        <p className="text-sm text-muted-foreground">{t("authorizing")}</p>
       </div>
     );
   }
@@ -91,9 +97,9 @@ export default function Home() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-muted-foreground">Привет,</p>
+          <p className="text-sm text-muted-foreground">{t("greeting")}</p>
           <h1 className="text-xl font-bold">
-            {user?.telegramFirstName || user?.name || "Пользователь"} 👋
+            {user?.telegramFirstName || user?.name || t("user_fallback")} 👋
           </h1>
         </div>
         <Button
@@ -111,7 +117,7 @@ export default function Home() {
 
       {/* Balance Card */}
       <div className="tg-card bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10">
-        <p className="text-xs text-muted-foreground mb-1">Общий баланс</p>
+        <p className="text-xs text-muted-foreground mb-1">{t("total_balance")}</p>
         <p className="text-3xl font-bold">
           {summaryLoading ? (
             <span className="inline-block w-32 h-9 bg-muted animate-pulse rounded" />
@@ -132,7 +138,7 @@ export default function Home() {
               <ArrowUpCircle className="h-4 w-4 text-income" />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground">Доходы</p>
+              <p className="text-[10px] text-muted-foreground">{t("income")}</p>
               <p className="text-sm font-semibold text-income">
                 {summaryLoading
                   ? "..."
@@ -147,7 +153,7 @@ export default function Home() {
               <ArrowDownCircle className="h-4 w-4 text-expense" />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground">Расходы</p>
+              <p className="text-[10px] text-muted-foreground">{t("expenses")}</p>
               <p className="text-sm font-semibold text-expense">
                 {summaryLoading
                   ? "..."
@@ -162,17 +168,27 @@ export default function Home() {
 
       {/* Voice Recorder */}
       <div className="tg-card text-center">
-        <p className="text-sm font-medium mb-3">Голосовой ввод</p>
+        <p className="text-sm font-medium mb-3">{t("voice_input")}</p>
         <VoiceRecorder onResult={handleVoiceResult} />
         <p className="text-[10px] text-muted-foreground mt-2">RU / AZ / EN</p>
       </div>
 
+      {/* Receipt Scanner */}
+      <Button
+        variant="outline"
+        className="w-full h-12 gap-2 border-dashed border-primary/40 text-primary hover:bg-primary/10"
+        onClick={() => setShowReceiptScanner(true)}
+      >
+        <ScanLine className="h-5 w-5" />
+        {t("scan_receipt")}
+      </Button>
+
       {/* Recent Transactions */}
       <div className="tg-section">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold">Последние записи</h2>
+          <h2 className="text-sm font-semibold">{t("recent_records")}</h2>
           <a href="/transactions" className="text-xs text-primary font-medium">
-            Все →
+            {t("all_records")}
           </a>
         </div>
         {txnsLoading ? (
@@ -183,32 +199,32 @@ export default function Home() {
           </div>
         ) : recentTxns && recentTxns.length > 0 ? (
           <div className="space-y-2">
-            {recentTxns.map((t) => (
+            {recentTxns.map((t_item) => (
               <div
-                key={t.transaction.id}
+                key={t_item.transaction.id}
                 className="tg-card flex items-center gap-3 py-3"
               >
                 <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-lg">
-                  {t.categoryIcon || "📦"}
+                  {t_item.categoryIcon || "📦"}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
-                    {t.transaction.description || t.categoryName || "Транзакция"}
+                    {t_item.transaction.description || t_item.categoryName || t("transaction_label")}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    {t.categoryName} ·{" "}
-                    {new Date(t.transaction.date).toLocaleDateString("ru-RU")}
+                    {t_item.categoryName} ·{" "}
+                    {new Date(t_item.transaction.date).toLocaleDateString("ru-RU")}
                   </p>
                 </div>
                 <p
                   className={`text-sm font-semibold ${
-                    t.transaction.type === "income"
+                    t_item.transaction.type === "income"
                       ? "text-income"
                       : "text-expense"
                   }`}
                 >
-                  {t.transaction.type === "income" ? "+" : "-"}
-                  {parseFloat(t.transaction.amount).toLocaleString("ru-RU", {
+                  {t_item.transaction.type === "income" ? "+" : "-"}
+                  {parseFloat(t_item.transaction.amount).toLocaleString("ru-RU", {
                     minimumFractionDigits: 2,
                   })}
                 </p>
@@ -218,23 +234,33 @@ export default function Home() {
         ) : (
           <div className="tg-card text-center py-8">
             <p className="text-sm text-muted-foreground">
-              Нет записей. Начните с голосового ввода!
+              {t("no_records")}
             </p>
           </div>
         )}
       </div>
+
+      {/* Receipt Scanner */}
+      <ReceiptScanner
+        open={showReceiptScanner}
+        onOpenChange={setShowReceiptScanner}
+        onSuccess={() => {
+          utils.transactions.list.invalidate();
+          utils.reports.summary.invalidate();
+        }}
+      />
 
       {/* Add Transaction Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-md mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {voiceResult ? "Подтвердите транзакцию" : "Новая транзакция"}
+              {voiceResult ? t("confirm_transaction") : t("new_transaction")}
             </DialogTitle>
           </DialogHeader>
           {voiceResult && (
             <div className="bg-secondary/50 rounded-lg p-3 mb-2">
-              <p className="text-xs text-muted-foreground mb-1">Распознано:</p>
+              <p className="text-xs text-muted-foreground mb-1">{t("recognized")}</p>
               <p className="text-sm italic">"{voiceResult.transcription}"</p>
             </div>
           )}

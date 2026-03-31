@@ -2,9 +2,24 @@ import { ENV } from "./env";
 
 export type Role = "system" | "user" | "assistant";
 
+export type TextContent = {
+  type: "text";
+  text: string;
+};
+
+export type ImageContent = {
+  type: "image_url";
+  image_url: {
+    url: string;
+    detail?: "auto" | "low" | "high";
+  };
+};
+
+export type MessageContent = string | TextContent | ImageContent;
+
 export type Message = {
   role: Role;
-  content: string;
+  content: MessageContent | MessageContent[];
 };
 
 export type InvokeParams = {

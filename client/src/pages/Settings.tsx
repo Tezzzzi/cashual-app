@@ -17,7 +17,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Settings as SettingsIcon,
   Globe,
   Coins,
   Tag,
@@ -26,8 +25,10 @@ import {
   Loader2,
   LogOut,
   Info,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useLanguage, type Lang } from "@/contexts/LanguageContext";
 
 const EMOJI_OPTIONS = [
   "🛒", "🚗", "🏠", "🎬", "💊", "👕", "📚", "🍽️", "📱", "📺",
@@ -41,6 +42,7 @@ const COLOR_OPTIONS = [
 
 export default function Settings() {
   const { isAuthenticated, user, logout } = useAuth();
+  const { t, lang, setLang } = useLanguage();
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [newCatIcon, setNewCatIcon] = useState("📦");
@@ -56,7 +58,7 @@ export default function Settings() {
   const updateSettings = trpc.settings.update.useMutation({
     onSuccess: () => {
       utils.auth.me.invalidate();
-      toast.success("Настройки сохранены");
+      toast.success(t("settings_saved"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -66,7 +68,7 @@ export default function Settings() {
       utils.categories.list.invalidate();
       setShowAddCategory(false);
       setNewCatName("");
-      toast.success("Категория создана");
+      toast.success(t("category_created"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -74,7 +76,7 @@ export default function Settings() {
   const deleteCategory = trpc.categories.delete.useMutation({
     onSuccess: () => {
       utils.categories.list.invalidate();
-      toast.success("Категория удалена");
+      toast.success(t("category_deleted"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -82,7 +84,7 @@ export default function Settings() {
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-muted-foreground">Войдите для просмотра</p>
+        <p className="text-muted-foreground">{t("login_to_view")}</p>
       </div>
     );
   }
@@ -90,10 +92,18 @@ export default function Settings() {
   const customCategories = categories?.filter((c) => !c.isPreset) || [];
   const presetCategories = categories?.filter((c) => c.isPreset) || [];
 
+  const handleLanguageChange = (val: string) => {
+    const newLang = val as Lang;
+    // Update local state immediately for instant UI feedback
+    setLang(newLang);
+    // Persist to server
+    updateSettings.mutate({ preferredLanguage: val });
+  };
+
   return (
-    <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto">
+    <div className="px-4 pt-4 pb-8 space-y-4 max-w-lg mx-auto">
       {/* Header */}
-      <h1 className="text-xl font-bold">Настройки</h1>
+      <h1 className="text-xl font-bold">{t("settings_title")}</h1>
 
       {/* User Info */}
       <div className="tg-card flex items-center gap-3">
@@ -102,7 +112,7 @@ export default function Settings() {
         </div>
         <div className="flex-1">
           <p className="text-sm font-semibold">
-            {user?.telegramFirstName || user?.name || "Пользователь"}
+            {user?.telegramFirstName || user?.name || t("user_fallback")}
           </p>
           <p className="text-xs text-muted-foreground">
             {user?.email || user?.telegramUsername || ""}
@@ -114,19 +124,19 @@ export default function Settings() {
       <div className="tg-card space-y-3">
         <div className="flex items-center gap-2">
           <Globe className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Язык интерфейса</span>
+          <span className="text-sm font-medium">{t("interface_language")}</span>
         </div>
         <Select
-          value={user?.preferredLanguage || "ru"}
-          onValueChange={(val) => updateSettings.mutate({ preferredLanguage: val })}
+          value={lang}
+          onValueChange={handleLanguageChange}
         >
           <SelectTrigger className="h-10">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ru">Русский</SelectItem>
-            <SelectItem value="az">Azərbaycanca</SelectItem>
-            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="ru">🇷🇺 Русский</SelectItem>
+            <SelectItem value="az">🇦🇿 Azərbaycanca</SelectItem>
+            <SelectItem value="en">🇬🇧 English</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -135,7 +145,7 @@ export default function Settings() {
       <div className="tg-card space-y-3">
         <div className="flex items-center gap-2">
           <Coins className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Валюта по умолчанию</span>
+          <span className="text-sm font-medium">{t("default_currency")}</span>
         </div>
         <Select
           value={user?.preferredCurrency || "AZN"}
@@ -145,12 +155,35 @@ export default function Settings() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="AZN">AZN — Манат</SelectItem>
+            <SelectItem value="AZN">AZN — Manat</SelectItem>
             <SelectItem value="RUB">RUB — Рубль</SelectItem>
-            <SelectItem value="USD">USD — Доллар</SelectItem>
-            <SelectItem value="EUR">EUR — Евро</SelectItem>
-            <SelectItem value="TRY">TRY — Лира</SelectItem>
-            <SelectItem value="GEL">GEL — Лари</SelectItem>
+            <SelectItem value="USD">USD — Dollar</SelectItem>
+            <SelectItem value="EUR">EUR — Euro</SelectItem>
+            <SelectItem value="TRY">TRY — Lira</SelectItem>
+            <SelectItem value="GEL">GEL — Lari</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Default Budget */}
+      <div className="tg-card space-y-3">
+        <div className="flex items-center gap-2">
+          <Wallet className="h-4 w-4 text-muted-foreground" />
+          <div>
+            <span className="text-sm font-medium">{t("default_budget")}</span>
+            <p className="text-[10px] text-muted-foreground">{t("default_budget_desc")}</p>
+          </div>
+        </div>
+        <Select
+          value={user?.defaultBudget || "personal"}
+          onValueChange={(val) => updateSettings.mutate({ defaultBudget: val as "personal" | "family" })}
+        >
+          <SelectTrigger className="h-10">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="personal">{t("default_budget_personal")}</SelectItem>
+            <SelectItem value="family">{t("default_budget_family")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -160,7 +193,7 @@ export default function Settings() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Tag className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Категории</span>
+            <span className="text-sm font-medium">{t("categories")}</span>
           </div>
           <Button
             variant="outline"
@@ -168,7 +201,7 @@ export default function Settings() {
             onClick={() => setShowAddCategory(true)}
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
-            Добавить
+            {t("add_category")}
           </Button>
         </div>
 
@@ -176,7 +209,7 @@ export default function Settings() {
         {customCategories.length > 0 && (
           <div>
             <p className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider">
-              Ваши категории
+              {t("your_categories")}
             </p>
             <div className="space-y-1.5">
               {customCategories.map((c) => (
@@ -210,7 +243,7 @@ export default function Settings() {
         {/* Preset categories */}
         <div>
           <p className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider">
-            Стандартные
+            {t("preset_categories")}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {presetCategories.map((c) => (
@@ -229,12 +262,10 @@ export default function Settings() {
       <div className="tg-card space-y-2">
         <div className="flex items-center gap-2">
           <Info className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">О приложении</span>
+          <span className="text-sm font-medium">{t("about")}</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Voice Finance Tracker — голосовой финансовый трекер для Telegram.
-          Диктуйте расходы и доходы голосом на русском, азербайджанском или
-          английском языке.
+          {t("about_text")}
         </p>
       </div>
 
@@ -245,18 +276,18 @@ export default function Settings() {
         onClick={() => logout()}
       >
         <LogOut className="h-4 w-4 mr-2" />
-        Выйти
+        {t("logout")}
       </Button>
 
       {/* Add Category Dialog */}
       <Dialog open={showAddCategory} onOpenChange={setShowAddCategory}>
         <DialogContent className="max-w-md mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Новая категория</DialogTitle>
+            <DialogTitle>{t("new_category")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <Input
-              placeholder="Название"
+              placeholder={t("category_name")}
               value={newCatName}
               onChange={(e) => setNewCatName(e.target.value)}
               className="h-12"
@@ -264,7 +295,7 @@ export default function Settings() {
 
             {/* Icon picker */}
             <div>
-              <p className="text-xs text-muted-foreground mb-2">Иконка</p>
+              <p className="text-xs text-muted-foreground mb-2">{t("icon")}</p>
               <div className="flex flex-wrap gap-2">
                 {EMOJI_OPTIONS.map((emoji) => (
                   <button
@@ -284,7 +315,7 @@ export default function Settings() {
 
             {/* Color picker */}
             <div>
-              <p className="text-xs text-muted-foreground mb-2">Цвет</p>
+              <p className="text-xs text-muted-foreground mb-2">{t("color")}</p>
               <div className="flex flex-wrap gap-2">
                 {COLOR_OPTIONS.map((color) => (
                   <button
@@ -310,9 +341,9 @@ export default function Settings() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="both">Доход и расход</SelectItem>
-                <SelectItem value="expense">Только расход</SelectItem>
-                <SelectItem value="income">Только доход</SelectItem>
+                <SelectItem value="both">{t("income_expense")}</SelectItem>
+                <SelectItem value="expense">{t("expense_only")}</SelectItem>
+                <SelectItem value="income">{t("income_only")}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -331,7 +362,7 @@ export default function Settings() {
               {createCategory.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                "Создать"
+                t("create")
               )}
             </Button>
           </div>

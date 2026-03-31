@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `defaultBudget` enum('personal','family') DEFAULT 'personal';

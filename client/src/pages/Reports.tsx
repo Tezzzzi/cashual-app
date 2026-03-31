@@ -3,13 +3,6 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Loader2,
   Download,
   ArrowUpCircle,
@@ -22,14 +15,10 @@ import {
   Pie,
   Cell,
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
   Tooltip,
-  Legend,
 } from "recharts";
 import { toast } from "sonner";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 type Period = "week" | "month" | "year" | "all";
 
@@ -56,6 +45,7 @@ function getPeriodRange(period: Period): { startDate?: number; endDate?: number 
 
 export default function Reports() {
   const { isAuthenticated } = useAuth();
+  const { t } = useLanguage();
   const [period, setPeriod] = useState<Period>("month");
   const [reportType, setReportType] = useState<"expense" | "income">("expense");
 
@@ -72,7 +62,6 @@ export default function Reports() {
 
   const exportCsv = trpc.reports.exportCsv.useMutation({
     onSuccess: (data) => {
-      // Create a blob and download the CSV
       const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       const url = URL.createObjectURL(blob);
@@ -105,16 +94,23 @@ export default function Reports() {
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-muted-foreground">Войдите для просмотра</p>
+        <p className="text-muted-foreground">{t("login_to_view")}</p>
       </div>
     );
   }
+
+  const periods: { key: Period; label: string }[] = [
+    { key: "week", label: t("week") },
+    { key: "month", label: t("month") },
+    { key: "year", label: t("year") },
+    { key: "all", label: t("all_time") },
+  ];
 
   return (
     <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Отчёты</h1>
+        <h1 className="text-xl font-bold">{t("reports_title")}</h1>
         <Button
           variant="outline"
           size="sm"
@@ -126,7 +122,7 @@ export default function Reports() {
           ) : (
             <>
               <Download className="h-3.5 w-3.5 mr-1" />
-              CSV
+              {t("export_csv")}
             </>
           )}
         </Button>
@@ -134,15 +130,15 @@ export default function Reports() {
 
       {/* Period Selector */}
       <div className="flex gap-1.5">
-        {(["week", "month", "year", "all"] as Period[]).map((p) => (
+        {periods.map((p) => (
           <Button
-            key={p}
-            variant={period === p ? "default" : "outline"}
+            key={p.key}
+            variant={period === p.key ? "default" : "outline"}
             size="sm"
             className="flex-1 text-xs"
-            onClick={() => setPeriod(p)}
+            onClick={() => setPeriod(p.key)}
           >
-            {p === "week" ? "Неделя" : p === "month" ? "Месяц" : p === "year" ? "Год" : "Всё"}
+            {p.label}
           </Button>
         ))}
       </div>
@@ -151,7 +147,7 @@ export default function Reports() {
       <div className="grid grid-cols-3 gap-2">
         <div className="tg-card text-center">
           <ArrowUpCircle className="h-5 w-5 text-income mx-auto mb-1" />
-          <p className="text-[10px] text-muted-foreground">Доходы</p>
+          <p className="text-[10px] text-muted-foreground">{t("income")}</p>
           <p className="text-sm font-bold text-income">
             {summaryLoading
               ? "..."
@@ -162,7 +158,7 @@ export default function Reports() {
         </div>
         <div className="tg-card text-center">
           <ArrowDownCircle className="h-5 w-5 text-expense mx-auto mb-1" />
-          <p className="text-[10px] text-muted-foreground">Расходы</p>
+          <p className="text-[10px] text-muted-foreground">{t("expenses")}</p>
           <p className="text-sm font-bold text-expense">
             {summaryLoading
               ? "..."
@@ -173,7 +169,7 @@ export default function Reports() {
         </div>
         <div className="tg-card text-center">
           <Wallet className="h-5 w-5 text-primary mx-auto mb-1" />
-          <p className="text-[10px] text-muted-foreground">Баланс</p>
+          <p className="text-[10px] text-muted-foreground">{t("balance")}</p>
           <p className="text-sm font-bold">
             {summaryLoading
               ? "..."
@@ -192,7 +188,7 @@ export default function Reports() {
           size="sm"
           onClick={() => setReportType("expense")}
         >
-          Расходы
+          {t("filter_expense")}
         </Button>
         <Button
           variant={reportType === "income" ? "default" : "outline"}
@@ -200,7 +196,7 @@ export default function Reports() {
           size="sm"
           onClick={() => setReportType("income")}
         >
-          Доходы
+          {t("filter_income")}
         </Button>
       </div>
 
@@ -211,7 +207,7 @@ export default function Reports() {
         </div>
       ) : pieData.length > 0 ? (
         <div className="tg-card">
-          <p className="text-sm font-semibold mb-3">По категориям</p>
+          <p className="text-sm font-semibold mb-3">{t("by_category")}</p>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -277,7 +273,7 @@ export default function Reports() {
         <div className="tg-card text-center py-8">
           <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">
-            Нет данных за выбранный период
+            {t("no_data")}
           </p>
         </div>
       )}

@@ -26,6 +26,7 @@ export const users = mysqlTable("users", {
   telegramPhotoUrl: text("telegramPhotoUrl"),
   preferredLanguage: varchar("preferredLanguage", { length: 10 }).default("ru"),
   preferredCurrency: varchar("preferredCurrency", { length: 10 }).default("AZN"),
+  defaultBudget: mysqlEnum("defaultBudget", ["personal", "family"]).default("personal"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

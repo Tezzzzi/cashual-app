@@ -1,16 +1,18 @@
 import { Home, List, BarChart3, Users, Settings } from "lucide-react";
 import { useLocation, Link } from "wouter";
-
-const navItems = [
-  { path: "/", icon: Home, label: "Главная" },
-  { path: "/transactions", icon: List, label: "Записи" },
-  { path: "/reports", icon: BarChart3, label: "Отчёты" },
-  { path: "/family", icon: Users, label: "Семья" },
-  { path: "/settings", icon: Settings, label: "Ещё" },
-];
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function BottomNav() {
   const [location] = useLocation();
+  const { t } = useLanguage();
+
+  const navItems = [
+    { path: "/", icon: Home, label: t("nav_home") },
+    { path: "/transactions", icon: List, label: t("nav_transactions") },
+    { path: "/reports", icon: BarChart3, label: t("nav_reports") },
+    { path: "/family", icon: Users, label: t("nav_family") },
+    { path: "/settings", icon: Settings, label: t("nav_settings") },
+  ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border safe-bottom">

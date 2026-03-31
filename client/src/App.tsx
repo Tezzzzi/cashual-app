@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { LanguageProvider } from "./contexts/LanguageContext";
 import Home from "./pages/Home";
 import Transactions from "./pages/Transactions";
 import Reports from "./pages/Reports";
@@ -29,15 +30,17 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
-        <TooltipProvider>
-          <Toaster position="top-center" />
-          <div className="min-h-screen bg-background text-foreground flex flex-col">
-            <div className="flex-1 pb-20">
-              <Router />
+        <LanguageProvider>
+          <TooltipProvider>
+            <Toaster position="top-center" />
+            <div className="min-h-screen bg-background text-foreground flex flex-col">
+              <div className="flex-1 pb-20">
+                <Router />
+              </div>
+              <BottomNav />
             </div>
-            <BottomNav />
-          </div>
-        </TooltipProvider>
+          </TooltipProvider>
+        </LanguageProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

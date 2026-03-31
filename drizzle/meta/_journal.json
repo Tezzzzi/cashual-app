@@ -15,6 +15,13 @@
       "when": 1774906329484,
       "tag": "0001_young_amazoness",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1774977082077,
+      "tag": "0002_smiling_frog_thor",
+      "breakpoints": true
     }
   ]
 }
