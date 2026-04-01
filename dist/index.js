@@ -1203,7 +1203,7 @@ var transactionsRouter = router({
       if (!isMember) throw new TRPCError3({ code: "FORBIDDEN", message: "Not a group member" });
     }
     if (input?.scope && input.scope !== "mine" && input?.familyGroupId) {
-      const viewableIds = await getViewableUserIds(ctx.user.id, input.familyGroupId);
+      const viewableIds = await getViewableUserIds(input.familyGroupId, ctx.user.id);
       let userIds;
       if (input.scope === "partner") {
         userIds = viewableIds.filter((id) => id !== ctx.user.id);

@@ -93,7 +93,7 @@ const transactionsRouter = router({
 
       // Handle family scope filtering (same logic as reports)
       if (input?.scope && input.scope !== "mine" && input?.familyGroupId) {
-        const viewableIds = await getViewableUserIds(ctx.user.id, input.familyGroupId);
+        const viewableIds = await getViewableUserIds(input.familyGroupId, ctx.user.id);
         let userIds: number[];
         if (input.scope === "partner") {
           userIds = viewableIds.filter((id) => id !== ctx.user.id);
