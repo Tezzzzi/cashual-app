@@ -598,6 +598,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     } catch {}
   };
 
+  // REC-02: Dynamically update <html lang> attribute when language changes
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   const t = (key: TranslationKey): string => {
     return (translations[lang] as any)[key] ?? (translations.ru as any)[key] ?? key;
   };

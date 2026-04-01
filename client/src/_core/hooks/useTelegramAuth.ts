@@ -63,7 +63,7 @@ export function useTelegramAuth() {
       if (!initData) {
         console.warn("[Telegram Auth] No initData - running outside Telegram");
         setAuthState("error");
-        setError("Откройте приложение через Telegram бота @cashua_appl_bot");
+        setError("Откройте приложение через Telegram бота @cashual_bot");
         return;
       }
 

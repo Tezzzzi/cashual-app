@@ -213,6 +213,9 @@ import "dotenv/config";
 import express3 from "express";
 import { createServer } from "http";
 import net from "net";
+import compression from "compression";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
 // server/_core/telegram-auth.ts
@@ -1877,8 +1880,54 @@ async function findAvailablePort(startPort = 3e3) {
 async function startServer() {
   const app = express3();
   const server = createServer(app);
-  app.use(express3.json({ limit: "50mb" }));
+  app.disable("x-powered-by");
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      // Telegram Mini App needs inline scripts
+      crossOriginEmbedderPolicy: false,
+      // Allow embedding in Telegram WebView
+      crossOriginOpenerPolicy: false
+    })
+  );
+  app.use(compression());
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1e3,
+    // 15 minutes
+    max: 30,
+    // 30 attempts per window per IP
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many authentication attempts, please try again later" }
+  });
+  const apiLimiter = rateLimit({
+    windowMs: 1 * 60 * 1e3,
+    // 1 minute
+    max: 120,
+    // 120 requests per minute per IP
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests, please try again later" }
+  });
+  app.use("/api/telegram/auth", authLimiter);
+  app.use("/api/trpc", apiLimiter);
+  app.use(
+    express3.json({
+      limit: "50mb"
+    })
+  );
   app.use(express3.urlencoded({ limit: "50mb", extended: true }));
+  app.use(
+    (err, _req, res, next) => {
+      if (err.type === "entity.parse.failed") {
+        return res.status(400).json({
+          error: "Invalid JSON",
+          message: "The request body contains invalid JSON"
+        });
+      }
+      next(err);
+    }
+  );
   registerTelegramRoutes(app);
   app.use(
     "/api/trpc",

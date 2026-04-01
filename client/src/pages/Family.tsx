@@ -119,7 +119,7 @@ export default function Family() {
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-muted-foreground">{t("initializing")}</p>
+        <p className="text-muted-foreground">{t("login_to_view")}</p>
       </div>
     );
   }

@@ -76,7 +76,7 @@ export default function Home() {
         ) : null}
         <p className="text-xs text-muted-foreground text-center max-w-xs">
           {t("open_via_telegram")}{" "}
-          <span className="text-primary font-medium">@cashua_appl_bot</span>
+          <span className="text-primary font-medium">@cashual_bot</span>
         </p>
       </div>
     );
