@@ -295,13 +295,11 @@ export async function getReportSummary(
 
   const conditions = [];
 
-  if (opts?.familyGroupId && opts?.userIds && opts.userIds.length > 0) {
-    // Family shared reports: filter by family group + specific user IDs
-    conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
-    conditions.push(eq(transactions.isFamily, true));
+  if (opts?.userIds && opts.userIds.length > 0) {
+    // Family shared reports: filter by specific user IDs (shows ALL their transactions)
     conditions.push(inArray(transactions.userId, opts.userIds));
   } else if (opts?.familyGroupId) {
-    // Filter by specific family group (all members)
+    // Filter by specific family group (all members, family-tagged only)
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else {
@@ -340,13 +338,11 @@ export async function getReportByCategory(
 
   const conditions = [];
 
-  if (opts?.familyGroupId && opts?.userIds && opts.userIds.length > 0) {
-    // Family shared reports: filter by family group + specific user IDs
-    conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
-    conditions.push(eq(transactions.isFamily, true));
+  if (opts?.userIds && opts.userIds.length > 0) {
+    // Family shared reports: filter by specific user IDs (shows ALL their transactions)
     conditions.push(inArray(transactions.userId, opts.userIds));
   } else if (opts?.familyGroupId) {
-    // Filter by specific family group (all members)
+    // Filter by specific family group (all members, family-tagged only)
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
   } else {

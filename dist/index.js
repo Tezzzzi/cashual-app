@@ -501,9 +501,7 @@ async function getReportSummary(userId, opts) {
   const db = await getDb();
   if (!db) return { totalIncome: 0, totalExpense: 0, balance: 0 };
   const conditions = [];
-  if (opts?.familyGroupId && opts?.userIds && opts.userIds.length > 0) {
-    conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
-    conditions.push(eq(transactions.isFamily, true));
+  if (opts?.userIds && opts.userIds.length > 0) {
     conditions.push(inArray(transactions.userId, opts.userIds));
   } else if (opts?.familyGroupId) {
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
@@ -529,9 +527,7 @@ async function getReportByCategory(userId, opts) {
   const db = await getDb();
   if (!db) return [];
   const conditions = [];
-  if (opts?.familyGroupId && opts?.userIds && opts.userIds.length > 0) {
-    conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
-    conditions.push(eq(transactions.isFamily, true));
+  if (opts?.userIds && opts.userIds.length > 0) {
     conditions.push(inArray(transactions.userId, opts.userIds));
   } else if (opts?.familyGroupId) {
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
