@@ -17,6 +17,11 @@ type VoiceRecorderProps = {
       description: string;
       date: number;
       language: string;
+      budgetContext?: "personal" | "family" | "work";
+      isFamily?: boolean;
+      isWork?: boolean;
+      businessGroupId?: number | null;
+      detectedBusinessGroupName?: string | null;
     };
     rawTranscription: string;
   }) => void;

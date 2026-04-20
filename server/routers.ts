@@ -237,9 +237,10 @@ Rules:
 BUDGET CONTEXT DETECTION (apply these strictly):
 User's default budget: ${ctx.user.defaultBudget || "personal"}
 User's business workspaces: ${businessGroupNames}
-- If the user mentions a company name, business, work, client, or project (e.g. "для компании ABC", "рабочий расход", "business expense for Project X", "iş xərci") → set budgetContext to "work" and businessGroupName to the mentioned company/project name (match against available workspaces if possible)
-- If the user mentions family, spouse, children, home shared expense (e.g. "семейный расход", "для семьи", "ailə xərci") → set budgetContext to "family"
-- If no context clue is present → set budgetContext to "${ctx.user.defaultBudget || "personal"}"
+- WORK triggers (any of these words/phrases → budgetContext="work"): "рабочий", "рабочие", "для работы", "для компании", "компания", "бизнес", "клиент", "проект", "офис", "iş", "iş xərci", "şirkət", "biznes", "work", "business", "company", "client", "project", "office", "corporate". When work is detected, set businessGroupName to the company/project name mentioned (match against user's workspaces list if possible, else use the name as-is).
+- FAMILY triggers (any of these → budgetContext="family"): "семейный", "семья", "для семьи", "ailə", "ailə xərci", "family", "для жены", "для мужа", "для детей"
+- DEFAULT: If no work or family trigger is present → set budgetContext to "${ctx.user.defaultBudget || "personal"}"
+EXAMPLE: "Рабочий расход для компании DM 15 евро такси" → budgetContext="work", businessGroupName="DM", categoryName="Транспорт", amount=15, currency="EUR"
 
 CATEGORY MATCHING RULES (apply these strictly):
 - Hotel minibar, hotel bar, hotel restaurant, room service → use "Рестораны" (NOT "Жильё")

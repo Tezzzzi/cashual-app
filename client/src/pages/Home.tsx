@@ -276,6 +276,9 @@ export default function Home() {
                     date: voiceResult.parsed.date,
                     sourceLanguage: voiceResult.language || voiceResult.parsed.language,
                     rawTranscription: voiceResult.rawTranscription || voiceResult.transcription,
+                    isFamily: voiceResult.parsed.isFamily ?? false,
+                    isWork: voiceResult.parsed.isWork ?? false,
+                    businessGroupId: voiceResult.parsed.businessGroupId ?? null,
                   }
                 : undefined
             }
