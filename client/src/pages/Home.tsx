@@ -25,7 +25,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Home() {
   const { user, loading, isAuthenticated, error, authState } = useTelegramAuth();
-  const { t } = useLanguage();
+  const { t, translateCategory } = useLanguage();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showReceiptScanner, setShowReceiptScanner] = useState(false);
   const [voiceResult, setVoiceResult] = useState<any>(null);
@@ -209,10 +209,10 @@ export default function Home() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
-                    {t_item.transaction.description || t_item.categoryName || t("transaction_label")}
+                    {t_item.transaction.description || translateCategory(t_item.categoryName || "") || t("transaction_label")}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    {t_item.categoryName} ·{" "}
+                    {translateCategory(t_item.categoryName || "")} ·{" "}
                     {new Date(t_item.transaction.date).toLocaleDateString("ru-RU")}
                   </p>
                 </div>

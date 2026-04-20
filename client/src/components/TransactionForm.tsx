@@ -38,7 +38,7 @@ export default function TransactionForm({
   onCancel,
 }: TransactionFormProps) {
   const isEditing = !!initialData?.id;
-  const { t } = useLanguage();
+  const { t, translateCategory } = useLanguage();
 
   const [type, setType] = useState<"income" | "expense">(
     initialData?.type || "expense"
@@ -221,7 +221,7 @@ export default function TransactionForm({
               <SelectItem key={c.id} value={c.id.toString()}>
                 <span className="flex items-center gap-2">
                   <span>{c.icon}</span>
-                  <span>{c.name}</span>
+                  <span>{translateCategory(c.name)}</span>
                 </span>
               </SelectItem>
             ))}
