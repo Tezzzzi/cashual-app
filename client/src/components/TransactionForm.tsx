@@ -331,21 +331,29 @@ export default function TransactionForm({
 
           {/* Business group selector */}
           {budgetMode === "work" && hasBusinessGroups && (
-            <Select value={businessGroupId} onValueChange={setBusinessGroupId}>
-              <SelectTrigger className="h-12">
-                <SelectValue placeholder={t("select_business_group")} />
-              </SelectTrigger>
-              <SelectContent>
-                {businessGroups.map((bg) => (
-                  <SelectItem key={bg.id} value={bg.id.toString()}>
-                    <span className="flex items-center gap-2">
-                      <span>{bg.icon}</span>
-                      <span>{bg.name}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1">
+              {!businessGroupId && (
+                <p className="text-xs text-amber-500 font-medium flex items-center gap-1">
+                  <span>⚠️</span>
+                  <span>{t("select_business_group_hint") || "Select which company this expense belongs to"}</span>
+                </p>
+              )}
+              <Select value={businessGroupId} onValueChange={setBusinessGroupId}>
+                <SelectTrigger className={`h-12 ${!businessGroupId ? "border-amber-400 ring-1 ring-amber-300" : ""}`}>
+                  <SelectValue placeholder={t("select_business_group")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {businessGroups.map((bg) => (
+                    <SelectItem key={bg.id} value={bg.id.toString()}>
+                      <span className="flex items-center gap-2">
+                        <span>{bg.icon}</span>
+                        <span>{bg.name}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
         </div>
       )}

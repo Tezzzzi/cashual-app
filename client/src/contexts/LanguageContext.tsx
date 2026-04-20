@@ -176,6 +176,7 @@ const translations = {
     business_delete_confirm: "Удалить рабочий бюджет?",
     business_delete_desc: "Транзакции останутся, но больше не будут привязаны к этому бюджету.",
     select_business_group: "Выберите компанию",
+    select_business_group_hint: "Выберите компанию для этого расхода",
 
     // Receipt
     scan_receipt: "Сканировать чек",
@@ -367,6 +368,7 @@ const translations = {
     business_delete_confirm: "İş büḑcəsi silinsin?",
     business_delete_desc: "Əməliyyatlar qalar, lakin bu büḑcəyə bağlı olmayacaq.",
     select_business_group: "Şirkəti seçin",
+    select_business_group_hint: "Bu xərc üçün şirkəti seçin",
 
     // Receipt
     scan_receipt: "Çeki skan et",
@@ -558,6 +560,7 @@ const translations = {
     business_delete_confirm: "Delete work budget?",
     business_delete_desc: "Transactions will remain but will no longer be linked to this budget.",
     select_business_group: "Select company",
+    select_business_group_hint: "Select which company this expense belongs to",
 
     // Receipt
     scan_receipt: "Scan Receipt",

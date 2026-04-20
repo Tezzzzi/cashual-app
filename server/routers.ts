@@ -205,7 +205,9 @@ const voiceRouter = router({
       const userCategories = await getCategories(ctx.user.id);
       const categoryNames = userCategories.map((c) => c.name).join(", ");
       const userBusinessGroups = await getBusinessGroups(ctx.user.id);
-      const businessGroupNames = userBusinessGroups.map((g) => g.name).join(", ") || "(none)";
+      const businessGroupNames = userBusinessGroups.length > 0
+        ? userBusinessGroups.map((g, i) => `${i + 1}. "${g.name}"`).join(", ")
+        : "(none)";
 
       // Step 3: Parse with LLM
       const now = new Date();
@@ -236,11 +238,15 @@ Rules:
 
 BUDGET CONTEXT DETECTION (apply these strictly):
 User's default budget: ${ctx.user.defaultBudget || "personal"}
-User's business workspaces: ${businessGroupNames}
-- WORK triggers (any of these words/phrases → budgetContext="work"): "рабочий", "рабочие", "для работы", "для компании", "компания", "бизнес", "клиент", "проект", "офис", "iş", "iş xərci", "şirkət", "biznes", "work", "business", "company", "client", "project", "office", "corporate". When work is detected, set businessGroupName to the company/project name mentioned (match against user's workspaces list if possible, else use the name as-is).
+User's business workspaces (numbered list): ${businessGroupNames}
+- WORK triggers (any of these words/phrases → budgetContext="work"): "рабочий", "рабочие", "для работы", "для компании", "компания", "бизнес", "клиент", "проект", "офис", "iş", "iş xərci", "şirkət", "biznes", "work", "business", "company", "client", "project", "office", "corporate".
+  When work is detected: look for a company/project name in the speech. If found, set businessGroupName to the EXACT name from the workspaces list above that best matches (fuzzy/partial match allowed). If no company name is mentioned, set businessGroupName to empty string "".
 - FAMILY triggers (any of these → budgetContext="family"): "семейный", "семья", "для семьи", "ailə", "ailə xərci", "family", "для жены", "для мужа", "для детей"
 - DEFAULT: If no work or family trigger is present → set budgetContext to "${ctx.user.defaultBudget || "personal"}"
-EXAMPLE: "Рабочий расход для компании DM 15 евро такси" → budgetContext="work", businessGroupName="DM", categoryName="Транспорт", amount=15, currency="EUR"
+EXAMPLES:
+  "Рабочий расход для компании DM 15 евро такси" → budgetContext="work", businessGroupName="DM"
+  "рабочий расход 20 манат обед" → budgetContext="work", businessGroupName="" (no company specified)
+  "business lunch for ABC Corp 30 USD" → budgetContext="work", businessGroupName="ABC Corp"
 
 CATEGORY MATCHING RULES (apply these strictly):
 - Hotel minibar, hotel bar, hotel restaurant, room service → use "Рестораны" (NOT "Жильё")
