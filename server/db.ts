@@ -8,11 +8,13 @@ import {
   familyGroups,
   familyGroupMembers,
   familyPermissions,
+  businessGroups,
   type InsertCategory,
   type InsertTransaction,
   type InsertFamilyGroup,
   type InsertFamilyGroupMember,
   type InsertFamilyPermission,
+  type InsertBusinessGroup,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -204,6 +206,8 @@ export async function getTransactions(
   opts?: {
     familyGroupId?: number;
     isFamily?: boolean;
+    isWork?: boolean;
+    businessGroupId?: number;
     startDate?: number;
     endDate?: number;
     type?: "income" | "expense";
@@ -235,7 +239,9 @@ export async function getTransactions(
   if (opts?.endDate) conditions.push(lte(transactions.date, opts.endDate));
   if (opts?.type) conditions.push(eq(transactions.type, opts.type));
   if (opts?.categoryId) conditions.push(eq(transactions.categoryId, opts.categoryId));
-
+  if (opts?.isWork === true) conditions.push(eq(transactions.isWork, true));
+  if (opts?.isWork === false) conditions.push(eq(transactions.isWork, false));
+  if (opts?.businessGroupId) conditions.push(eq(transactions.businessGroupId, opts.businessGroupId));
   return db
     .select({
       transaction: transactions,
@@ -331,7 +337,7 @@ export async function getReportSummary(
 
 export async function getReportByCategory(
   userId: number,
-  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; type?: "income" | "expense"; userIds?: number[] }
+  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; type?: "income" | "expense"; userIds?: number[]; isWork?: boolean; businessGroupId?: number; }
 ) {
   const db = await getDb();
   if (!db) return [];
@@ -350,10 +356,12 @@ export async function getReportByCategory(
     conditions.push(eq(transactions.userId, userId));
   }
 
-  if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
+   if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
   if (opts?.endDate) conditions.push(lte(transactions.date, opts.endDate));
   if (opts?.type) conditions.push(eq(transactions.type, opts.type));
-
+  if (opts?.isWork === true) conditions.push(eq(transactions.isWork, true));
+  if (opts?.isWork === false) conditions.push(eq(transactions.isWork, false));
+  if (opts?.businessGroupId) conditions.push(eq(transactions.businessGroupId, opts.businessGroupId));
   return db
     .select({
       categoryId: transactions.categoryId,
@@ -654,4 +662,44 @@ export async function initializePermissionsForNewMember(
     // Existing members grant new member access
     await setFamilyPermission(familyGroupId, member.userId, newMemberId, true);
   }
+}
+
+// ─── Business Groups ─────────────────────────────────────────────────
+
+export async function getBusinessGroups(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(businessGroups)
+    .where(eq(businessGroups.userId, userId))
+    .orderBy(businessGroups.createdAt);
+}
+
+export async function createBusinessGroup(data: InsertBusinessGroup) {
+  const db = await getDb();
+  if (!db) return null;
+  const [result] = await db.insert(businessGroups).values(data).$returningId();
+  return result;
+}
+
+export async function updateBusinessGroup(
+  id: number,
+  userId: number,
+  data: Partial<Pick<InsertBusinessGroup, "name" | "icon" | "color">>
+) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(businessGroups)
+    .set(data)
+    .where(and(eq(businessGroups.id, id), eq(businessGroups.userId, userId)));
+}
+
+export async function deleteBusinessGroup(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(businessGroups)
+    .where(and(eq(businessGroups.id, id), eq(businessGroups.userId, userId)));
 }

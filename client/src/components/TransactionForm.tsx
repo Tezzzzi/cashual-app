@@ -25,6 +25,8 @@ type TransactionFormProps = {
     date?: number;
     isFamily?: boolean;
     familyGroupId?: number | null;
+    isWork?: boolean;
+    businessGroupId?: number | null;
     sourceLanguage?: string;
     rawTranscription?: string;
   };
@@ -63,9 +65,16 @@ export default function TransactionForm({
   const [familyGroupId, setFamilyGroupId] = useState<string>(
     initialData?.familyGroupId?.toString() || ""
   );
+  const [isWork, setIsWork] = useState(
+    initialData?.isWork !== undefined ? initialData.isWork : false
+  );
+  const [businessGroupId, setBusinessGroupId] = useState<string>(
+    initialData?.businessGroupId?.toString() || ""
+  );
 
   const { data: categories } = trpc.categories.list.useQuery();
   const { data: familyGroups } = trpc.family.myGroups.useQuery();
+  const { data: businessGroups } = trpc.business.myGroups.useQuery();
   const { data: currentUser } = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
 
@@ -74,8 +83,7 @@ export default function TransactionForm({
     if (!familyGroups || familyGroups.length === 0) return;
     const firstGroup = familyGroups[0].group;
     // Only set defaults if not already set from initialData
-    if (initialData?.isFamily === undefined) {
-      // Use user's defaultBudget preference (defaults to 'personal' if not set)
+    if (initialData?.isFamily === undefined && initialData?.isWork === undefined) {
       const defaultToFamily = currentUser?.defaultBudget === "family";
       setIsFamily(defaultToFamily);
     }
@@ -84,6 +92,14 @@ export default function TransactionForm({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [familyGroups, currentUser?.defaultBudget]);
+
+  // When business groups load, auto-select first if isWork and none selected
+  useEffect(() => {
+    if (isWork && businessGroups && businessGroups.length > 0 && !businessGroupId) {
+      setBusinessGroupId(businessGroups[0].id.toString());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessGroups, isWork]);
 
   const createMutation = trpc.transactions.create.useMutation({
     onSuccess: () => {
@@ -116,13 +132,20 @@ export default function TransactionForm({
 
   const isLoading = createMutation.isPending || updateMutation.isPending;
 
+  // Budget mode: "personal" | "family" | "work"
+  const budgetMode = isWork ? "work" : isFamily ? "family" : "personal";
+  const setBudgetMode = (mode: "personal" | "family" | "work") => {
+    setIsFamily(mode === "family");
+    setIsWork(mode === "work");
+  };
+
   const handleSubmit = () => {
     if (!amount || parseFloat(amount) <= 0) {
-      toast.error("Введите сумму");
+      toast.error(t("enter_amount"));
       return;
     }
     if (!categoryId) {
-      toast.error("Выберите категорию");
+      toast.error(t("select_category_error"));
       return;
     }
 
@@ -139,6 +162,8 @@ export default function TransactionForm({
         date: dateTimestamp,
         isFamily,
         familyGroupId: isFamily && familyGroupId ? parseInt(familyGroupId) : null,
+        isWork,
+        businessGroupId: isWork && businessGroupId ? parseInt(businessGroupId) : null,
       });
     } else {
       createMutation.mutate({
@@ -150,11 +175,16 @@ export default function TransactionForm({
         date: dateTimestamp,
         isFamily,
         familyGroupId: isFamily && familyGroupId ? parseInt(familyGroupId) : null,
+        isWork,
+        businessGroupId: isWork && businessGroupId ? parseInt(businessGroupId) : null,
         sourceLanguage: initialData?.sourceLanguage,
         rawTranscription: initialData?.rawTranscription,
       });
     }
   };
+
+  const hasFamilyGroups = familyGroups && familyGroups.length > 0;
+  const hasBusinessGroups = businessGroups && businessGroups.length > 0;
 
   return (
     <div className="space-y-4">
@@ -251,26 +281,40 @@ export default function TransactionForm({
         />
       </div>
 
-      {/* Family toggle */}
-      {familyGroups && familyGroups.length > 0 && (
+      {/* Budget toggle: Personal / Family / Work */}
+      {(hasFamilyGroups || hasBusinessGroups) && (
         <div className="space-y-2">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
-              variant={!isFamily ? "default" : "outline"}
+              variant={budgetMode === "personal" ? "default" : "outline"}
               size="sm"
-              onClick={() => setIsFamily(false)}
+              onClick={() => setBudgetMode("personal")}
             >
               {t("personal")}
             </Button>
-            <Button
-              variant={isFamily ? "default" : "outline"}
-              size="sm"
-              onClick={() => setIsFamily(true)}
-            >
-              {t("family")}
-            </Button>
+            {hasFamilyGroups && (
+              <Button
+                variant={budgetMode === "family" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setBudgetMode("family")}
+              >
+                {t("family")}
+              </Button>
+            )}
+            {hasBusinessGroups && (
+              <Button
+                variant={budgetMode === "work" ? "default" : "outline"}
+                size="sm"
+                className={budgetMode === "work" ? "bg-blue-600 text-white hover:bg-blue-700" : ""}
+                onClick={() => setBudgetMode("work")}
+              >
+                💼 {t("work")}
+              </Button>
+            )}
           </div>
-          {isFamily && (
+
+          {/* Family group selector */}
+          {budgetMode === "family" && hasFamilyGroups && (
             <Select value={familyGroupId} onValueChange={setFamilyGroupId}>
               <SelectTrigger className="h-12">
                 <SelectValue placeholder={t("select_group")} />
@@ -279,6 +323,25 @@ export default function TransactionForm({
                 {familyGroups.map((fg) => (
                   <SelectItem key={fg.group.id} value={fg.group.id.toString()}>
                     {fg.group.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Business group selector */}
+          {budgetMode === "work" && hasBusinessGroups && (
+            <Select value={businessGroupId} onValueChange={setBusinessGroupId}>
+              <SelectTrigger className="h-12">
+                <SelectValue placeholder={t("select_business_group")} />
+              </SelectTrigger>
+              <SelectContent>
+                {businessGroups.map((bg) => (
+                  <SelectItem key={bg.id} value={bg.id.toString()}>
+                    <span className="flex items-center gap-2">
+                      <span>{bg.icon}</span>
+                      <span>{bg.name}</span>
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>

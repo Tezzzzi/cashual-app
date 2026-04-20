@@ -62,6 +62,8 @@ export const transactions = mysqlTable("transactions", {
   date: bigint("date", { mode: "number" }).notNull(), // UTC timestamp ms
   isFamily: boolean("isFamily").default(false).notNull(),
   familyGroupId: int("familyGroupId"), // null = personal
+  isWork: boolean("isWork").default(false).notNull(), // tagged as business/work expense
+  businessGroupId: int("businessGroupId"), // null = not a business expense
   sourceLanguage: varchar("sourceLanguage", { length: 10 }), // detected language
   rawTranscription: text("rawTranscription"), // original voice text
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -70,6 +72,20 @@ export const transactions = mysqlTable("transactions", {
 
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = typeof transactions.$inferInsert;
+
+// ─── Business Groups (Company Workspaces) ───────────────────────────
+export const businessGroups = mysqlTable("businessGroups", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(), // e.g. "Company ABC", "Freelance Project X"
+  icon: varchar("icon", { length: 64 }).notNull().default("💼"),
+  color: varchar("color", { length: 32 }).notNull().default("#0ea5e9"),
+  userId: int("userId").notNull(), // owner
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BusinessGroup = typeof businessGroups.$inferSelect;
+export type InsertBusinessGroup = typeof businessGroups.$inferInsert;
 
 // ─── Family Groups ───────────────────────────────────────────────────
 export const familyGroups = mysqlTable("familyGroups", {

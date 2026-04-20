@@ -22,6 +22,13 @@
       "when": 1774977082077,
       "tag": "0002_smiling_frog_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1745100000000,
+      "tag": "0003_add_iswork_field",
+      "breakpoints": true
     }
   ]
 }

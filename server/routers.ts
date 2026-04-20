@@ -29,6 +29,10 @@ import {
   setFamilyPermission,
   getViewableUserIds,
   initializePermissionsForNewMember,
+  getBusinessGroups,
+  createBusinessGroup,
+  updateBusinessGroup,
+  deleteBusinessGroup,
 } from "./db";
 import { transcribeAudio } from "./_core/openai-whisper";
 import { invokeLLM } from "./_core/openai-llm";
@@ -75,6 +79,8 @@ const transactionsRouter = router({
         .object({
           familyGroupId: z.number().optional(),
           isFamily: z.boolean().optional(),
+          isWork: z.boolean().optional(),
+          businessGroupId: z.number().optional(),
           startDate: z.number().optional(),
           endDate: z.number().optional(),
           type: z.enum(["income", "expense"]).optional(),
@@ -119,6 +125,8 @@ const transactionsRouter = router({
         date: z.number(),
         isFamily: z.boolean().default(false),
         familyGroupId: z.number().optional().nullable(),
+        isWork: z.boolean().default(false),
+        businessGroupId: z.number().optional().nullable(),
         sourceLanguage: z.string().optional(),
         rawTranscription: z.string().optional(),
       })
@@ -132,6 +140,7 @@ const transactionsRouter = router({
         ...input,
         userId: ctx.user.id,
         familyGroupId: input.familyGroupId ?? null,
+        businessGroupId: input.businessGroupId ?? null,
       });
     }),
 
@@ -147,6 +156,8 @@ const transactionsRouter = router({
         date: z.number().optional(),
         isFamily: z.boolean().optional(),
         familyGroupId: z.number().optional().nullable(),
+        isWork: z.boolean().optional(),
+        businessGroupId: z.number().optional().nullable(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -190,9 +201,11 @@ const voiceRouter = router({
         });
       }
 
-      // Step 2: Get user's categories for context
+      // Step 2: Get user's categories and business groups for context
       const userCategories = await getCategories(ctx.user.id);
       const categoryNames = userCategories.map((c) => c.name).join(", ");
+      const userBusinessGroups = await getBusinessGroups(ctx.user.id);
+      const businessGroupNames = userBusinessGroups.map((g) => g.name).join(", ") || "(none)";
 
       // Step 3: Parse with LLM
       const now = new Date();
@@ -219,7 +232,31 @@ Rules:
 - Create a short description
 - If no specific date mentioned, use today's timestamp: ${todayMs}
 - The date field MUST be a Unix timestamp in milliseconds in the year ${currentYear}
-- Detect the language of the transcription (ru, az, en)`,
+- Detect the language of the transcription (ru, az, en)
+
+BUDGET CONTEXT DETECTION (apply these strictly):
+User's default budget: ${ctx.user.defaultBudget || "personal"}
+User's business workspaces: ${businessGroupNames}
+- If the user mentions a company name, business, work, client, or project (e.g. "для компании ABC", "рабочий расход", "business expense for Project X", "iş xərci") → set budgetContext to "work" and businessGroupName to the mentioned company/project name (match against available workspaces if possible)
+- If the user mentions family, spouse, children, home shared expense (e.g. "семейный расход", "для семьи", "ailə xərci") → set budgetContext to "family"
+- If no context clue is present → set budgetContext to "${ctx.user.defaultBudget || "personal"}"
+
+CATEGORY MATCHING RULES (apply these strictly):
+- Hotel minibar, hotel bar, hotel restaurant, room service → use "Рестораны" (NOT "Жильё")
+- Any food or drink purchase (cafe, coffee, restaurant, bar, minibar, snacks) → use "Рестораны"
+- Hotel room/accommodation/rent/apartment payment → use "Жильё"
+- Taxi, uber, bus, metro, train, flight → use "Транспорт"
+- Cinema, concert, club, entertainment venue → use "Развлечения"
+- Grocery store, supermarket, food market → use "Продукты"
+- Pharmacy, doctor, clinic, medicine → use "Здоровье"
+- Clothing store, shoes, fashion → use "Одежда"
+- Internet, phone plan, mobile top-up → use "Связь"
+- Netflix, Spotify, app subscription → use "Подписки"
+- Gift, present → use "Подарки"
+- Salary, wage → use "Зарплата"
+- Freelance work payment → use "Фриланс"
+- Stock, crypto, investment → use "Инвестиции"
+- Anything else → use "Другое"`,
           },
           {
             role: "user",
@@ -241,8 +278,10 @@ Rules:
                 description: { type: "string", description: "Short description of the transaction" },
                 date: { type: "number", description: "Unix timestamp in milliseconds" },
                 language: { type: "string", description: "Detected language code (ru, az, en)" },
+                budgetContext: { type: "string", enum: ["personal", "family", "work"], description: "Detected budget context" },
+                businessGroupName: { type: "string", description: "Company/project name if budgetContext is work, else empty string" },
               },
-              required: ["type", "amount", "currency", "categoryName", "description", "date", "language"],
+              required: ["type", "amount", "currency", "categoryName", "description", "date", "language", "budgetContext", "businessGroupName"],
               additionalProperties: false,
             },
           },
@@ -280,6 +319,17 @@ Rules:
         (c) => c.name.toLowerCase() === parsed.categoryName.toLowerCase()
       ) || userCategories.find((c) => c.name.toLowerCase().includes(parsed.categoryName.toLowerCase())) || userCategories[userCategories.length - 1]; // fallback to "Другое"
 
+      // Match business group if budgetContext is "work"
+      let matchedBusinessGroup: { id: number; name: string } | null = null;
+      if (parsed.budgetContext === "work" && parsed.businessGroupName) {
+        const bgName = (parsed.businessGroupName as string).toLowerCase();
+        matchedBusinessGroup = userBusinessGroups.find(
+          (g) => g.name.toLowerCase() === bgName
+        ) || userBusinessGroups.find(
+          (g) => g.name.toLowerCase().includes(bgName) || bgName.includes(g.name.toLowerCase())
+        ) || null;
+      }
+
       return {
         transcription: transcription.text,
         language: parsed.language || transcription.language,
@@ -288,6 +338,11 @@ Rules:
           categoryId: matchedCategory?.id,
           categoryName: matchedCategory?.name || parsed.categoryName,
           categoryIcon: matchedCategory?.icon || "📦",
+          budgetContext: parsed.budgetContext || ctx.user.defaultBudget || "personal",
+          isFamily: parsed.budgetContext === "family",
+          isWork: parsed.budgetContext === "work",
+          businessGroupId: matchedBusinessGroup?.id ?? null,
+          detectedBusinessGroupName: parsed.businessGroupName || null,
         },
         rawTranscription: transcription.text,
       };
@@ -373,6 +428,23 @@ For each transaction:
 - description: merchant name or meaningful description
 - date: UTC timestamp in milliseconds (MUST be in the year ${currentYear} unless the image shows a specific past date)
 - confidence: "high"/"medium"/"low"
+
+CATEGORY MATCHING RULES (apply these strictly):
+- Hotel minibar, hotel bar, hotel restaurant, room service -> use "Рестораны" (NOT "Жильё")
+- Any food or drink purchase (cafe, coffee, restaurant, bar, minibar, snacks) -> use "Рестораны"
+- Hotel room/accommodation/rent/apartment payment -> use "Жильё"
+- Taxi, uber, bus, metro, train, flight -> use "Транспорт"
+- Cinema, concert, club, entertainment venue -> use "Развлечения"
+- Grocery store, supermarket, food market -> use "Продукты"
+- Pharmacy, doctor, clinic, medicine -> use "Здоровье"
+- Clothing store, shoes, fashion -> use "Одежда"
+- Internet, phone plan, mobile top-up -> use "Связь"
+- Netflix, Spotify, app subscription -> use "Подписки"
+- Gift, present -> use "Подарки"
+- Salary, wage -> use "Зарплата"
+- Freelance work payment -> use "Фриланс"
+- Stock, crypto, investment -> use "Инвестиции"
+- Anything else -> use "Другое"
 
 Always return a transactions array, even for a single receipt (array with one item).`,
           },
@@ -793,6 +865,47 @@ const settingsRouter = router({
     }),
 });
 
+// ─── Business Router ───────────────────────────────────────────────
+const businessRouter = router({
+  myGroups: protectedProcedure.query(async ({ ctx }) => {
+    return getBusinessGroups(ctx.user.id);
+  }),
+
+  create: protectedProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(128),
+        icon: z.string().default("💼"),
+        color: z.string().default("#0ea5e9"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      return createBusinessGroup({ ...input, userId: ctx.user.id });
+    }),
+
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().min(1).max(128).optional(),
+        icon: z.string().optional(),
+        color: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      await updateBusinessGroup(id, ctx.user.id, data);
+      return { success: true };
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await deleteBusinessGroup(input.id, ctx.user.id);
+      return { success: true };
+    }),
+});
+
 // ─── Main Router ─────────────────────────────────────────────────────
 export const appRouter = router({
   system: systemRouter,
@@ -810,6 +923,7 @@ export const appRouter = router({
   reports: reportsRouter,
   family: familyRouter,
   settings: settingsRouter,
+  business: businessRouter,
 });
 
 export type AppRouter = typeof appRouter;

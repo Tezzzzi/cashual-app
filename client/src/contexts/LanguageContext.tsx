@@ -159,6 +159,24 @@ const translations = {
     cannot_see_expenses: "Не видит мои расходы",
     permission_updated: "Настройки доступа обновлены",
 
+    // Business / Work
+    nav_business: "Работа",
+    work: "Работа",
+    work_badge: "Работа",
+    business_title: "Рабочие бюджеты",
+    business_desc: "Создайте отдельные бюджеты для каждой компании или проекта. Помечайте транзакции как рабочие расходы.",
+    business_add_group: "Добавить",
+    business_new_group: "Новый рабочий бюджет",
+    business_edit_group: "Редактировать бюджет",
+    business_group_name_placeholder: "Название компании или проекта",
+    no_business_groups: "Нет рабочих бюджетов",
+    business_group_created: "Бюджет создан!",
+    business_group_updated: "Бюджет обновлён",
+    business_group_deleted: "Бюджет удалён",
+    business_delete_confirm: "Удалить рабочий бюджет?",
+    business_delete_desc: "Транзакции останутся, но больше не будут привязаны к этому бюджету.",
+    select_business_group: "Выберите компанию",
+
     // Receipt
     scan_receipt: "Сканировать чек",
     receipt_title: "Распознать чек",
@@ -332,6 +350,24 @@ const translations = {
     cannot_see_expenses: "Xərclərimə baxa bilməz",
     permission_updated: "Giriş parametrləri yeniləndi",
 
+    // Business / Work
+    nav_business: "İş",
+    work: "İş",
+    work_badge: "İş",
+    business_title: "İş büḑcələri",
+    business_desc: "Hər şirkət və ya layihə üçün ayrıca büḑcə yarat. Əməliyyatları iş xərci kimi qeyd edin.",
+    business_add_group: "Əlavə et",
+    business_new_group: "Yeni iş büḑcəsi",
+    business_edit_group: "Büḑcəni dəyiş",
+    business_group_name_placeholder: "Şirkət və ya layihə adı",
+    no_business_groups: "İş büḑcəsi yoxdur",
+    business_group_created: "Büḑcə yaradıldı!",
+    business_group_updated: "Büḑcə yeniləndi",
+    business_group_deleted: "Büḑcə silindi",
+    business_delete_confirm: "İş büḑcəsi silinsin?",
+    business_delete_desc: "Əməliyyatlar qalar, lakin bu büḑcəyə bağlı olmayacaq.",
+    select_business_group: "Şirkəti seçin",
+
     // Receipt
     scan_receipt: "Çeki skan et",
     receipt_title: "Çeki tanı",
@@ -504,6 +540,24 @@ const translations = {
     can_see_expenses: "Can see my expenses",
     cannot_see_expenses: "Cannot see my expenses",
     permission_updated: "Access settings updated",
+
+    // Business / Work
+    nav_business: "Work",
+    work: "Work",
+    work_badge: "Work",
+    business_title: "Work Budgets",
+    business_desc: "Create separate budgets for each company or project. Tag transactions as work expenses.",
+    business_add_group: "Add",
+    business_new_group: "New Work Budget",
+    business_edit_group: "Edit Budget",
+    business_group_name_placeholder: "Company or project name",
+    no_business_groups: "No work budgets yet",
+    business_group_created: "Budget created!",
+    business_group_updated: "Budget updated",
+    business_group_deleted: "Budget deleted",
+    business_delete_confirm: "Delete work budget?",
+    business_delete_desc: "Transactions will remain but will no longer be linked to this budget.",
+    select_business_group: "Select company",
 
     // Receipt
     scan_receipt: "Scan Receipt",

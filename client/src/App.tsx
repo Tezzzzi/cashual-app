@@ -15,6 +15,7 @@ import { Loader2 } from "lucide-react";
 const Transactions = lazy(() => import("./pages/Transactions"));
 const Reports = lazy(() => import("./pages/Reports"));
 const Family = lazy(() => import("./pages/Family"));
+const Business = lazy(() => import("./pages/Business"));
 const Settings = lazy(() => import("./pages/Settings"));
 
 function LazyFallback() {
@@ -33,6 +34,7 @@ function Router() {
         <Route path="/transactions" component={Transactions} />
         <Route path="/reports" component={Reports} />
         <Route path="/family" component={Family} />
+        <Route path="/business" component={Business} />
         <Route path="/settings" component={Settings} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

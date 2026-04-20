@@ -10,7 +10,15 @@ import {
   Wallet,
   TrendingUp,
   Users,
+  Briefcase,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   PieChart,
   Pie,
@@ -23,6 +31,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 type Period = "week" | "month" | "year" | "all";
 type Scope = "mine" | "partner" | "all";
+type BudgetFilter = "all" | "personal" | "family" | "work";
 
 function getPeriodRange(period: Period): { startDate?: number; endDate?: number } {
   if (period === "all") return {};
@@ -51,6 +60,8 @@ export default function Reports() {
   const [period, setPeriod] = useState<Period>("all");
   const [reportType, setReportType] = useState<"expense" | "income">("expense");
   const [scope, setScope] = useState<Scope>("mine");
+  const [budgetFilter, setBudgetFilter] = useState<BudgetFilter>("all");
+  const [businessGroupFilter, setBusinessGroupFilter] = useState<string>("all");
 
   // Fetch family groups to determine if user has a family
   const { data: familyGroups } = trpc.family.myGroups.useQuery(undefined, {
@@ -59,24 +70,40 @@ export default function Reports() {
   const hasFamily = (familyGroups?.length ?? 0) > 0;
   const familyGroupId = hasFamily ? familyGroups![0].group.id : undefined;
 
+  // Fetch business groups
+  const { data: businessGroups } = trpc.business.myGroups.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const hasBusiness = (businessGroups?.length ?? 0) > 0;
+
   const range = useMemo(() => getPeriodRange(period), [period]);
 
   // Build query params — include familyGroupId and scope only when viewing family reports
   const summaryParams = useMemo(() => {
-    const base = { ...range };
-    if (hasFamily && scope !== "mine") {
+    const base: Record<string, any> = { ...range };
+    if (budgetFilter === "work") {
+      base.isWork = true;
+      if (businessGroupFilter !== "all") base.businessGroupId = parseInt(businessGroupFilter);
+    } else if (budgetFilter === "family" && hasFamily && scope !== "mine") {
+      return { ...base, familyGroupId, scope };
+    } else if (budgetFilter === "all" && hasFamily && scope !== "mine") {
       return { ...base, familyGroupId, scope };
     }
     return base;
-  }, [range, hasFamily, scope, familyGroupId]);
+  }, [range, hasFamily, scope, familyGroupId, budgetFilter, businessGroupFilter]);
 
   const byCategoryParams = useMemo(() => {
-    const base = { ...range, type: reportType };
-    if (hasFamily && scope !== "mine") {
+    const base: Record<string, any> = { ...range, type: reportType };
+    if (budgetFilter === "work") {
+      base.isWork = true;
+      if (businessGroupFilter !== "all") base.businessGroupId = parseInt(businessGroupFilter);
+    } else if (budgetFilter === "family" && hasFamily && scope !== "mine") {
+      return { ...base, familyGroupId, scope };
+    } else if (budgetFilter === "all" && hasFamily && scope !== "mine") {
       return { ...base, familyGroupId, scope };
     }
     return base;
-  }, [range, reportType, hasFamily, scope, familyGroupId]);
+  }, [range, reportType, hasFamily, scope, familyGroupId, budgetFilter, businessGroupFilter]);
 
   const { data: summary, isLoading: summaryLoading } =
     trpc.reports.summary.useQuery(summaryParams, { enabled: isAuthenticated });
@@ -173,28 +200,86 @@ export default function Reports() {
         ))}
       </div>
 
-      {/* Family Scope Selector — only shown when user has a family group */}
-      {hasFamily && (
-        <div className="tg-card">
-          <div className="flex items-center gap-2 mb-2">
-            <Users className="h-4 w-4 text-primary" />
-            <span className="text-xs font-semibold text-muted-foreground">
-              {t("family_report_label")}
-            </span>
-          </div>
-          <div className="flex gap-1.5">
-            {scopes.map((s) => (
+      {/* Budget filter — shown when user has family or business groups */}
+      {(hasFamily || hasBusiness) && (
+        <div className="tg-card space-y-2">
+          <div className="flex gap-1.5 flex-wrap">
+            <Button
+              variant={budgetFilter === "all" ? "default" : "outline"}
+              size="sm"
+              className="text-xs"
+              onClick={() => setBudgetFilter("all")}
+            >
+              {t("all")}
+            </Button>
+            <Button
+              variant={budgetFilter === "personal" ? "default" : "outline"}
+              size="sm"
+              className="text-xs"
+              onClick={() => setBudgetFilter("personal")}
+            >
+              {t("personal")}
+            </Button>
+            {hasFamily && (
               <Button
-                key={s.key}
-                variant={scope === s.key ? "default" : "outline"}
+                variant={budgetFilter === "family" ? "default" : "outline"}
                 size="sm"
-                className={`flex-1 text-xs ${scope === s.key ? "bg-primary text-primary-foreground" : ""}`}
-                onClick={() => setScope(s.key)}
+                className="text-xs"
+                onClick={() => setBudgetFilter("family")}
               >
-                {s.label}
+                <Users className="h-3 w-3 mr-1" />
+                {t("family")}
               </Button>
-            ))}
+            )}
+            {hasBusiness && (
+              <Button
+                variant={budgetFilter === "work" ? "default" : "outline"}
+                size="sm"
+                className={`text-xs ${budgetFilter === "work" ? "bg-blue-600 text-white hover:bg-blue-700" : ""}`}
+                onClick={() => setBudgetFilter("work")}
+              >
+                <Briefcase className="h-3 w-3 mr-1" />
+                {t("work")}
+              </Button>
+            )}
           </div>
+
+          {/* Business group sub-filter */}
+          {budgetFilter === "work" && hasBusiness && businessGroups && businessGroups.length > 1 && (
+            <Select value={businessGroupFilter} onValueChange={setBusinessGroupFilter}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue placeholder={t("all")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("all")}</SelectItem>
+                {businessGroups.map((bg) => (
+                  <SelectItem key={bg.id} value={bg.id.toString()}>
+                    {bg.icon} {bg.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Family scope selector */}
+          {(budgetFilter === "family" || budgetFilter === "all") && hasFamily && (
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary shrink-0" />
+              <div className="flex gap-1.5 flex-1">
+                {scopes.map((s) => (
+                  <Button
+                    key={s.key}
+                    variant={scope === s.key ? "default" : "outline"}
+                    size="sm"
+                    className={`flex-1 text-xs ${scope === s.key ? "bg-primary text-primary-foreground" : ""}`}
+                    onClick={() => setScope(s.key)}
+                  >
+                    {s.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -31,12 +31,14 @@ import {
   Trash2,
   Filter,
   Users,
+  Briefcase,
 } from "lucide-react";
 import TransactionForm from "@/components/TransactionForm";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 type Scope = "mine" | "partner" | "all";
+type BudgetFilter = "all" | "personal" | "family" | "work";
 
 export default function Transactions() {
   const { isAuthenticated } = useAuth();
@@ -45,6 +47,8 @@ export default function Transactions() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
   const [scope, setScope] = useState<Scope>("mine");
+  const [budgetFilter, setBudgetFilter] = useState<BudgetFilter>("all");
+  const [businessGroupFilter, setBusinessGroupFilter] = useState<string>("all");
 
   // Fetch family groups to determine if user has a family
   const { data: familyGroups } = trpc.family.myGroups.useQuery(undefined, {
@@ -53,17 +57,38 @@ export default function Transactions() {
   const hasFamily = (familyGroups?.length ?? 0) > 0;
   const familyGroupId = hasFamily ? familyGroups![0].group.id : undefined;
 
-  // Build query params — include familyGroupId and scope when viewing family transactions
+  // Fetch business groups
+  const { data: businessGroups } = trpc.business.myGroups.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const hasBusiness = (businessGroups?.length ?? 0) > 0;
+
+  // Build query params
   const listParams = useMemo(() => {
     const base: Record<string, any> = {
       type: filterType !== "all" ? filterType : undefined,
       limit: 200,
     };
-    if (hasFamily && scope !== "mine") {
+
+    if (budgetFilter === "work") {
+      base.isWork = true;
+      if (businessGroupFilter !== "all") {
+        base.businessGroupId = parseInt(businessGroupFilter);
+      }
+    } else if (budgetFilter === "family" && hasFamily) {
+      base.isFamily = true;
+      if (scope !== "mine") {
+        return { ...base, familyGroupId, scope };
+      }
+    } else if (budgetFilter === "personal") {
+      base.isFamily = false;
+      base.isWork = false;
+    } else if (budgetFilter === "all" && hasFamily && scope !== "mine") {
       return { ...base, familyGroupId, scope };
     }
+
     return base;
-  }, [filterType, hasFamily, scope, familyGroupId]);
+  }, [filterType, hasFamily, scope, familyGroupId, budgetFilter, businessGroupFilter]);
 
   const { data: txns, isLoading } = trpc.transactions.list.useQuery(
     listParams,
@@ -97,7 +122,7 @@ export default function Transactions() {
   ];
 
   return (
-    <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto">
+    <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto pb-24">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">{t("transactions_title")}</h1>
@@ -114,28 +139,86 @@ export default function Transactions() {
         </Select>
       </div>
 
-      {/* Family Scope Selector — only shown when user has a family group */}
-      {hasFamily && (
-        <div className="tg-card">
-          <div className="flex items-center gap-2 mb-2">
-            <Users className="h-4 w-4 text-primary" />
-            <span className="text-xs font-semibold text-muted-foreground">
-              {t("family_transactions_label")}
-            </span>
-          </div>
-          <div className="flex gap-1.5">
-            {scopes.map((s) => (
+      {/* Budget filter tabs */}
+      {(hasFamily || hasBusiness) && (
+        <div className="tg-card space-y-2">
+          <div className="flex gap-1.5 flex-wrap">
+            <Button
+              variant={budgetFilter === "all" ? "default" : "outline"}
+              size="sm"
+              className="text-xs"
+              onClick={() => setBudgetFilter("all")}
+            >
+              {t("all")}
+            </Button>
+            <Button
+              variant={budgetFilter === "personal" ? "default" : "outline"}
+              size="sm"
+              className="text-xs"
+              onClick={() => setBudgetFilter("personal")}
+            >
+              {t("personal")}
+            </Button>
+            {hasFamily && (
               <Button
-                key={s.key}
-                variant={scope === s.key ? "default" : "outline"}
+                variant={budgetFilter === "family" ? "default" : "outline"}
                 size="sm"
-                className={`flex-1 text-xs ${scope === s.key ? "bg-primary text-primary-foreground" : ""}`}
-                onClick={() => setScope(s.key)}
+                className="text-xs"
+                onClick={() => setBudgetFilter("family")}
               >
-                {s.label}
+                <Users className="h-3 w-3 mr-1" />
+                {t("family")}
               </Button>
-            ))}
+            )}
+            {hasBusiness && (
+              <Button
+                variant={budgetFilter === "work" ? "default" : "outline"}
+                size="sm"
+                className={`text-xs ${budgetFilter === "work" ? "bg-blue-600 text-white hover:bg-blue-700" : ""}`}
+                onClick={() => setBudgetFilter("work")}
+              >
+                <Briefcase className="h-3 w-3 mr-1" />
+                {t("work")}
+              </Button>
+            )}
           </div>
+
+          {/* Business group sub-filter */}
+          {budgetFilter === "work" && hasBusiness && businessGroups && businessGroups.length > 1 && (
+            <Select value={businessGroupFilter} onValueChange={setBusinessGroupFilter}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue placeholder={t("all")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("all")}</SelectItem>
+                {businessGroups.map((bg) => (
+                  <SelectItem key={bg.id} value={bg.id.toString()}>
+                    {bg.icon} {bg.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Family scope selector */}
+          {(budgetFilter === "family" || budgetFilter === "all") && hasFamily && (
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary shrink-0" />
+              <div className="flex gap-1.5 flex-1">
+                {scopes.map((s) => (
+                  <Button
+                    key={s.key}
+                    variant={scope === s.key ? "default" : "outline"}
+                    size="sm"
+                    className={`flex-1 text-xs ${scope === s.key ? "bg-primary text-primary-foreground" : ""}`}
+                    onClick={() => setScope(s.key)}
+                  >
+                    {s.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -162,6 +245,11 @@ export default function Transactions() {
                   {t_item.transaction.isFamily && (
                     <span className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full shrink-0">
                       {t("family_badge")}
+                    </span>
+                  )}
+                  {t_item.transaction.isWork && (
+                    <span className="text-[9px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full shrink-0">
+                      💼 {t("work_badge")}
                     </span>
                   )}
                 </div>
@@ -202,6 +290,8 @@ export default function Transactions() {
                       date: t_item.transaction.date,
                       isFamily: t_item.transaction.isFamily,
                       familyGroupId: t_item.transaction.familyGroupId,
+                      isWork: t_item.transaction.isWork,
+                      businessGroupId: t_item.transaction.businessGroupId,
                     })
                   }
                 >
