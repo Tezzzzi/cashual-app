@@ -15,8 +15,8 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Build the application (force fresh build by removing any pre-built artifact)
-RUN rm -f dist/index.js && pnpm build
+# Build the application (force fresh build by removing ALL pre-built artifacts)
+RUN rm -rf dist/ && pnpm build
 
 # Set production environment
 ENV NODE_ENV=production

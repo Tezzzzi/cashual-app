@@ -3,8 +3,8 @@
 .pnpm-store/
 
 # Build outputs
-
 build/
+dist/
 *.dist
 
 # Environment variables
