@@ -1,7 +1,6 @@
 // Startup wrapper: patches globalThis.crypto for jose compatibility on Node.js 18
 // jose@6 uses Web Crypto API (globalThis.crypto) which may not be available in some Node.js 18 builds
 import { webcrypto } from 'crypto';
-import { execSync } from 'child_process';
 import mysql from 'mysql2/promise';
 
 // Polyfill globalThis.crypto if not available
@@ -10,11 +9,51 @@ if (!globalThis.crypto) {
   console.log('[startup] Patched globalThis.crypto for jose compatibility');
 }
 
-// Run database migrations on startup to ensure schema is up-to-date
+// Run database migrations on startup via raw SQL (idempotent)
+// drizzle-kit is a devDependency not available in production, so we run SQL directly
 try {
-  console.log('[startup] Running database migrations...');
-  execSync('npx drizzle-kit migrate', { stdio: 'inherit', cwd: process.cwd() });
-  console.log('[startup] Database migrations complete');
+  if (process.env.DATABASE_URL) {
+    console.log('[startup] Running database migrations...');
+    const migConn = await mysql.createConnection(process.env.DATABASE_URL);
+
+    // Migration 0003: businessGroups table + isWork/businessGroupId on transactions
+    await migConn.execute(`
+      CREATE TABLE IF NOT EXISTS \`businessGroups\` (
+        \`id\` int AUTO_INCREMENT NOT NULL,
+        \`name\` varchar(128) NOT NULL,
+        \`icon\` varchar(64) NOT NULL DEFAULT '💼',
+        \`color\` varchar(32) NOT NULL DEFAULT '#0ea5e9',
+        \`userId\` int NOT NULL,
+        \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+        \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        CONSTRAINT \`businessGroups_id\` PRIMARY KEY(\`id\`)
+      )
+    `);
+    console.log('[startup] businessGroups table ensured');
+
+    // Add isWork column if it doesn't exist
+    const [isWorkCols] = await migConn.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'transactions' AND COLUMN_NAME = 'isWork'`
+    );
+    if (isWorkCols.length === 0) {
+      await migConn.execute(`ALTER TABLE \`transactions\` ADD \`isWork\` boolean NOT NULL DEFAULT false`);
+      console.log('[startup] Added isWork column to transactions');
+    }
+
+    // Add businessGroupId column if it doesn't exist
+    const [bgCols] = await migConn.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'transactions' AND COLUMN_NAME = 'businessGroupId'`
+    );
+    if (bgCols.length === 0) {
+      await migConn.execute(`ALTER TABLE \`transactions\` ADD \`businessGroupId\` int`);
+      console.log('[startup] Added businessGroupId column to transactions');
+    }
+
+    await migConn.end();
+    console.log('[startup] Database migrations complete');
+  }
 } catch (err) {
   console.warn('[startup] Migration warning (non-fatal):', err.message);
 }
