@@ -713,6 +713,38 @@ const reportsRouter = router({
       return getReportByCategory(ctx.user.id, { ...input, userIds });
     }),
 
+  // Temporary debug endpoint to inspect work filtering
+  debugWork: protectedProcedure.query(async ({ ctx }) => {
+    const allWorkTxns = await getTransactions(ctx.user.id, { isWork: true, limit: 500 });
+    const businessGroupsList = await getBusinessGroups(ctx.user.id);
+    
+    // Get summary for isWork=true only (no businessGroupId)
+    const summaryAllWork = await getReportSummary(ctx.user.id, { isWork: true });
+    
+    // Get summary for each business group
+    const summaryPerGroup: Record<string, any> = {};
+    for (const bg of businessGroupsList) {
+      summaryPerGroup[`${bg.name}_id${bg.id}`] = await getReportSummary(ctx.user.id, { isWork: true, businessGroupId: bg.id });
+    }
+    
+    return {
+      businessGroups: businessGroupsList.map(bg => ({ id: bg.id, name: bg.name })),
+      totalWorkTransactions: allWorkTxns.length,
+      workTransactions: allWorkTxns.map(t => ({
+        id: t.transaction.id,
+        amount: t.transaction.amount,
+        type: t.transaction.type,
+        description: t.transaction.description,
+        isWork: t.transaction.isWork,
+        businessGroupId: t.transaction.businessGroupId,
+        categoryName: t.categoryName,
+      })),
+      summaryAllWork,
+      summaryPerGroup,
+      codeVersion: "debug-v2-businessGroupId-filter",
+    };
+  }),
+
   // Debug endpoint to inspect raw transaction dates
   debugDates: protectedProcedure.query(async ({ ctx }) => {
     const txns = await getTransactions(ctx.user.id, { limit: 50 });
