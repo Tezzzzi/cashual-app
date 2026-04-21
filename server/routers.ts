@@ -139,8 +139,9 @@ const transactionsRouter = router({
       return createTransaction({
         ...input,
         userId: ctx.user.id,
-        familyGroupId: input.familyGroupId ?? null,
-        businessGroupId: input.businessGroupId ?? null,
+        familyGroupId: input.isFamily ? (input.familyGroupId ?? null) : null,
+        isWork: input.isWork ?? false,
+        businessGroupId: input.isWork ? (input.businessGroupId ?? null) : null,
       });
     }),
 
@@ -162,6 +163,15 @@ const transactionsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      // Normalize: if isWork is explicitly set to false, clear businessGroupId
+      // to prevent stale businessGroupId from leaking into work reports
+      if (data.isWork === false) {
+        data.businessGroupId = null;
+      }
+      // Similarly, if isFamily is explicitly false, clear familyGroupId
+      if (data.isFamily === false) {
+        data.familyGroupId = null;
+      }
       await updateTransaction(id, ctx.user.id, data);
       return { success: true };
     }),

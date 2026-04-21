@@ -108,5 +108,26 @@ try {
   console.warn('[startup] Year fix warning (non-fatal):', err.message);
 }
 
+// Clean up inconsistent data: null out businessGroupId on non-work transactions
+// This prevents personal transactions with stale businessGroupId from leaking into work reports
+try {
+  if (process.env.DATABASE_URL) {
+    console.log('[startup] Cleaning up stale businessGroupId on non-work transactions...');
+    const cleanupConn = await mysql.createConnection(process.env.DATABASE_URL);
+    const [cleanupRows] = await cleanupConn.execute(
+      'UPDATE transactions SET businessGroupId = NULL WHERE isWork = false AND businessGroupId IS NOT NULL'
+    );
+    const cleanedUp = cleanupRows.affectedRows || 0;
+    if (cleanedUp > 0) {
+      console.log(`[startup] Cleaned up ${cleanedUp} transactions with stale businessGroupId`);
+    } else {
+      console.log('[startup] No stale businessGroupId values found');
+    }
+    await cleanupConn.end();
+  }
+} catch (err) {
+  console.warn('[startup] businessGroupId cleanup warning (non-fatal):', err.message);
+}
+
 // Now start the actual server
 await import('./dist/index.js');

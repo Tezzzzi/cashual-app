@@ -239,9 +239,16 @@ export async function getTransactions(
   if (opts?.endDate) conditions.push(lte(transactions.date, opts.endDate));
   if (opts?.type) conditions.push(eq(transactions.type, opts.type));
   if (opts?.categoryId) conditions.push(eq(transactions.categoryId, opts.categoryId));
-  if (opts?.isWork === true) conditions.push(eq(transactions.isWork, true));
-  if (opts?.isWork === false) conditions.push(eq(transactions.isWork, false));
-  if (opts?.businessGroupId) conditions.push(eq(transactions.businessGroupId, opts.businessGroupId));
+  if (opts?.businessGroupId) {
+    // When filtering by specific business group, always require isWork=true
+    // to prevent personal transactions with stale businessGroupId from leaking
+    conditions.push(eq(transactions.isWork, true));
+    conditions.push(eq(transactions.businessGroupId, opts.businessGroupId));
+  } else if (opts?.isWork === true) {
+    conditions.push(eq(transactions.isWork, true));
+  } else if (opts?.isWork === false) {
+    conditions.push(eq(transactions.isWork, false));
+  }
   return db
     .select({
       transaction: transactions,
@@ -315,9 +322,16 @@ export async function getReportSummary(
 
   if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
   if (opts?.endDate) conditions.push(lte(transactions.date, opts.endDate));
-  if (opts?.isWork === true) conditions.push(eq(transactions.isWork, true));
-  if (opts?.isWork === false) conditions.push(eq(transactions.isWork, false));
-  if (opts?.businessGroupId) conditions.push(eq(transactions.businessGroupId, opts.businessGroupId));
+  if (opts?.businessGroupId) {
+    // When filtering by specific business group, always require isWork=true
+    // to prevent personal transactions with stale businessGroupId from leaking
+    conditions.push(eq(transactions.isWork, true));
+    conditions.push(eq(transactions.businessGroupId, opts.businessGroupId));
+  } else if (opts?.isWork === true) {
+    conditions.push(eq(transactions.isWork, true));
+  } else if (opts?.isWork === false) {
+    conditions.push(eq(transactions.isWork, false));
+  }
 
   const result = await db
     .select({
@@ -359,12 +373,19 @@ export async function getReportByCategory(
     conditions.push(eq(transactions.userId, userId));
   }
 
-   if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
+  if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
   if (opts?.endDate) conditions.push(lte(transactions.date, opts.endDate));
   if (opts?.type) conditions.push(eq(transactions.type, opts.type));
-  if (opts?.isWork === true) conditions.push(eq(transactions.isWork, true));
-  if (opts?.isWork === false) conditions.push(eq(transactions.isWork, false));
-  if (opts?.businessGroupId) conditions.push(eq(transactions.businessGroupId, opts.businessGroupId));
+  if (opts?.businessGroupId) {
+    // When filtering by specific business group, always require isWork=true
+    // to prevent personal transactions with stale businessGroupId from leaking
+    conditions.push(eq(transactions.isWork, true));
+    conditions.push(eq(transactions.businessGroupId, opts.businessGroupId));
+  } else if (opts?.isWork === true) {
+    conditions.push(eq(transactions.isWork, true));
+  } else if (opts?.isWork === false) {
+    conditions.push(eq(transactions.isWork, false));
+  }
   return db
     .select({
       categoryId: transactions.categoryId,
@@ -430,6 +451,24 @@ export async function fixTransactionDates() {
     console.log("[Database] Fixed transaction dates (seconds → milliseconds)");
   } catch (error) {
     console.error("[Database] Failed to fix transaction dates:", error);
+  }
+}
+
+/**
+ * Clean up inconsistent data: null out businessGroupId on transactions where isWork=false.
+ * This prevents personal transactions with stale businessGroupId from leaking into work reports.
+ * Runs on startup as a defensive data integrity fix.
+ */
+export async function cleanupStaleBusinessGroupIds() {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    const result = await db.execute(
+      sql`UPDATE transactions SET businessGroupId = NULL WHERE isWork = false AND businessGroupId IS NOT NULL`
+    );
+    console.log("[Database] Cleaned up stale businessGroupId on non-work transactions");
+  } catch (error) {
+    console.error("[Database] Failed to clean up stale businessGroupIds:", error);
   }
 }
 
