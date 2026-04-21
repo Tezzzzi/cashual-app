@@ -642,6 +642,8 @@ const reportsRouter = router({
           endDate: z.number().optional(),
           familyGroupId: z.number().optional(),
           scope: z.enum(["mine", "partner", "all"]).optional(),
+          isWork: z.boolean().optional(),
+          businessGroupId: z.number().optional(),
         })
         .optional()
     )
@@ -677,6 +679,8 @@ const reportsRouter = router({
           familyGroupId: z.number().optional(),
           type: z.enum(["income", "expense"]).optional(),
           scope: z.enum(["mine", "partner", "all"]).optional(),
+          isWork: z.boolean().optional(),
+          businessGroupId: z.number().optional(),
         })
         .optional()
     )

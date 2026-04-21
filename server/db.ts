@@ -294,7 +294,7 @@ export async function deleteTransaction(id: number, userId: number) {
 // ─── Reports ─────────────────────────────────────────────────────────
 export async function getReportSummary(
   userId: number,
-  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; userIds?: number[] }
+  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; userIds?: number[]; isWork?: boolean; businessGroupId?: number }
 ) {
   const db = await getDb();
   if (!db) return { totalIncome: 0, totalExpense: 0, balance: 0 };
@@ -315,6 +315,9 @@ export async function getReportSummary(
 
   if (opts?.startDate) conditions.push(gte(transactions.date, opts.startDate));
   if (opts?.endDate) conditions.push(lte(transactions.date, opts.endDate));
+  if (opts?.isWork === true) conditions.push(eq(transactions.isWork, true));
+  if (opts?.isWork === false) conditions.push(eq(transactions.isWork, false));
+  if (opts?.businessGroupId) conditions.push(eq(transactions.businessGroupId, opts.businessGroupId));
 
   const result = await db
     .select({
