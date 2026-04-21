@@ -756,16 +756,20 @@ const reportsRouter = router({
         limit: 5000,
       });
 
-      const header = "Date,Type,Category,Amount,Currency,Description,Family\n";
+      const header = "Date,Type,Category,Amount,Currency,Description,Family,Work,Company\n";
       const rows = txns
         .map((t) => {
           const date = new Date(t.transaction.date).toISOString().split("T")[0];
           const desc = (t.transaction.description || "").replace(/"/g, '""');
-          return `${date},${t.transaction.type},${t.categoryName || ""},${t.transaction.amount},${t.transaction.currency},"${desc}",${t.transaction.isFamily ? "Yes" : "No"}`;
+          const catName = (t.categoryName || "").replace(/"/g, '""');
+          return `${date},${t.transaction.type},"${catName}",${t.transaction.amount},${t.transaction.currency},"${desc}",${t.transaction.isFamily ? "Yes" : "No"},${t.transaction.isWork ? "Yes" : "No"},""`;
         })
         .join("\n");
 
-      const csv = header + rows;
+      // UTF-8 BOM prefix ensures Excel and other spreadsheet apps correctly detect encoding
+      // and display Cyrillic/Unicode characters properly with default (readable) formatting
+      const bom = "\uFEFF";
+      const csv = bom + header + rows;
       return { 
         csv,
         filename: `transactions_${new Date().toISOString().split("T")[0]}.csv`,
