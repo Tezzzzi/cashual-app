@@ -219,7 +219,7 @@ const voiceRouter = router({
         ? userBusinessGroups.map((g, i) => `${i + 1}. "${g.name}"`).join(", ")
         : "(none)";
 
-      // Step 3: Parse with LLM
+      // Step 3: Parse with LLM — supports MULTIPLE transactions in one voice message
       const now = new Date();
       const currentYear = now.getFullYear();
       const todayMs = now.getTime();
@@ -228,6 +228,9 @@ const voiceRouter = router({
           {
             role: "system",
             content: `You are a financial transaction parser. Extract structured data from the user's voice transcription.
+
+**CRITICAL: The user may dictate MULTIPLE transactions in a single message.** Each distinct expense/income mentioned should be a separate transaction in the array. Look for conjunctions like "и" (and), "а также", "плюс", "ещё", commas separating amounts, or different budget contexts as signals of multiple transactions.
+
 Available categories: ${categoryNames}
 
 **IMPORTANT — TODAY'S DATE: ${now.toISOString()} (year ${currentYear})**
@@ -236,7 +239,7 @@ You MUST use the year ${currentYear} for all dates. Do NOT use 2024 or any other
 
 User's preferred currency: ${ctx.user.preferredCurrency || "AZN"}
 
-Rules:
+Rules for EACH transaction:
 - Determine if it's income or expense from context
 - Match to the closest available category name
 - Extract the amount (number only)
@@ -246,17 +249,19 @@ Rules:
 - The date field MUST be a Unix timestamp in milliseconds in the year ${currentYear}
 - Detect the language of the transcription (ru, az, en)
 
-BUDGET CONTEXT DETECTION (apply these strictly):
+BUDGET CONTEXT DETECTION (apply PER TRANSACTION — different transactions in the same message can have different budgets):
 User's default budget: ${ctx.user.defaultBudget || "personal"}
 User's business workspaces (numbered list): ${businessGroupNames}
 - WORK triggers (any of these words/phrases → budgetContext="work"): "рабочий", "рабочие", "для работы", "для компании", "компания", "бизнес", "клиент", "проект", "офис", "iş", "iş xərci", "şirkət", "biznes", "work", "business", "company", "client", "project", "office", "corporate".
   When work is detected: look for a company/project name in the speech. If found, set businessGroupName to the EXACT name from the workspaces list above that best matches (fuzzy/partial match allowed). If no company name is mentioned, set businessGroupName to empty string "".
-- FAMILY triggers (any of these → budgetContext="family"): "семейный", "семья", "для семьи", "ailə", "ailə xərci", "family", "для жены", "для мужа", "для детей"
+- FAMILY triggers (any of these → budgetContext="family"): "семейный", "семья", "для семьи", "ailə", "ailə xərci", "family", "для жены", "для мужа", "для детей", "домой"
 - DEFAULT: If no work or family trigger is present → set budgetContext to "${ctx.user.defaultBudget || "personal"}"
+
 EXAMPLES:
-  "Рабочий расход для компании DM 15 евро такси" → budgetContext="work", businessGroupName="DM"
-  "рабочий расход 20 манат обед" → budgetContext="work", businessGroupName="" (no company specified)
-  "business lunch for ABC Corp 30 USD" → budgetContext="work", businessGroupName="ABC Corp"
+  "Рабочий расход для компании DM 15 евро такси" → 1 transaction: budgetContext="work", businessGroupName="DM"
+  "потратил 50 манат на такси по работе в DM и 30 манат на продукты домой" → 2 transactions: [taxi 50 AZN work/DM, groceries 30 AZN family]
+  "business lunch 30 USD and personal groceries 50" → 2 transactions: [lunch 30 USD work, groceries 50 personal]
+  "зарплата 5000 и потратил 200 на одежду" → 2 transactions: [salary 5000 income, clothing 200 expense]
 
 CATEGORY MATCHING RULES (apply these strictly):
 - Hotel minibar, hotel bar, hotel restaurant, room service → use "Рестораны" (NOT "Жильё")
@@ -273,32 +278,44 @@ CATEGORY MATCHING RULES (apply these strictly):
 - Salary, wage → use "Зарплата"
 - Freelance work payment → use "Фриланс"
 - Stock, crypto, investment → use "Инвестиции"
-- Anything else → use "Другое"`,
+- Anything else → use "Другое"
+
+Always return a transactions array, even for a single transaction (array with one item).`,
           },
           {
             role: "user",
-            content: `Parse this transcription into a financial transaction: "${transcription.text}"`,
+            content: `Parse ALL transactions from this voice transcription: "${transcription.text}"`,
           },
         ],
         response_format: {
           type: "json_schema",
           json_schema: {
-            name: "parsed_transaction",
+            name: "parsed_transactions",
             strict: true,
             schema: {
               type: "object",
               properties: {
-                type: { type: "string", enum: ["income", "expense"], description: "Transaction type" },
-                amount: { type: "number", description: "Transaction amount" },
-                currency: { type: "string", description: "Currency code (AZN, USD, EUR, RUB, etc.)" },
-                categoryName: { type: "string", description: "Best matching category name from the available list" },
-                description: { type: "string", description: "Short description of the transaction" },
-                date: { type: "number", description: "Unix timestamp in milliseconds" },
                 language: { type: "string", description: "Detected language code (ru, az, en)" },
-                budgetContext: { type: "string", enum: ["personal", "family", "work"], description: "Detected budget context" },
-                businessGroupName: { type: "string", description: "Company/project name if budgetContext is work, else empty string" },
+                transactions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: { type: "string", enum: ["income", "expense"], description: "Transaction type" },
+                      amount: { type: "number", description: "Transaction amount" },
+                      currency: { type: "string", description: "Currency code (AZN, USD, EUR, RUB, etc.)" },
+                      categoryName: { type: "string", description: "Best matching category name from the available list" },
+                      description: { type: "string", description: "Short description of the transaction" },
+                      date: { type: "number", description: "Unix timestamp in milliseconds" },
+                      budgetContext: { type: "string", enum: ["personal", "family", "work"], description: "Detected budget context for THIS transaction" },
+                      businessGroupName: { type: "string", description: "Company/project name if budgetContext is work, else empty string" },
+                    },
+                    required: ["type", "amount", "currency", "categoryName", "description", "date", "budgetContext", "businessGroupName"],
+                    additionalProperties: false,
+                  },
+                },
               },
-              required: ["type", "amount", "currency", "categoryName", "description", "date", "language", "budgetContext", "businessGroupName"],
+              required: ["language", "transactions"],
               additionalProperties: false,
             },
           },
@@ -310,56 +327,105 @@ CATEGORY MATCHING RULES (apply these strictly):
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to parse transaction" });
       }
 
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(content) as {
+        language: string;
+        transactions: Array<{
+          type: "income" | "expense";
+          amount: number;
+          currency: string;
+          categoryName: string;
+          description: string;
+          date: number;
+          budgetContext: "personal" | "family" | "work";
+          businessGroupName: string;
+        }>;
+      };
 
-      // Server-side date validation: fix dates with wrong year from LLM
-      if (parsed.date) {
-        const parsedDate = new Date(parsed.date);
-        const parsedYear = parsedDate.getFullYear();
-        if (parsedYear !== currentYear && parsedYear >= 2020 && parsedYear < currentYear) {
-          // LLM returned a past year (e.g. 2024) — fix to current year
-          parsedDate.setFullYear(currentYear);
-          parsed.date = parsedDate.getTime();
-          console.log(`[voice] Fixed LLM date from year ${parsedYear} to ${currentYear}: ${parsed.date}`);
+      // Helper: match category
+      const matchCategory = (categoryName: string) => {
+        return (
+          userCategories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase()) ||
+          userCategories.find((c) => c.name.toLowerCase().includes(categoryName.toLowerCase())) ||
+          userCategories[userCategories.length - 1]
+        );
+      };
+
+      // Helper: match business group
+      const matchBusinessGroup = (bgName: string) => {
+        if (!bgName) return null;
+        const lower = bgName.toLowerCase();
+        return (
+          userBusinessGroups.find((g) => g.name.toLowerCase() === lower) ||
+          userBusinessGroups.find((g) => g.name.toLowerCase().includes(lower) || lower.includes(g.name.toLowerCase())) ||
+          null
+        );
+      };
+
+      // Process each transaction
+      const enrichedTransactions = parsed.transactions.map((tx) => {
+        // Date validation
+        let fixedDate = tx.date;
+        if (fixedDate) {
+          const txDate = new Date(fixedDate);
+          const txYear = txDate.getFullYear();
+          if (txYear !== currentYear && txYear >= 2020 && txYear < currentYear) {
+            txDate.setFullYear(currentYear);
+            fixedDate = txDate.getTime();
+            console.log(`[voice] Fixed LLM date from year ${txYear} to ${currentYear}: ${fixedDate}`);
+          }
+          if (fixedDate > todayMs + 86400000) {
+            fixedDate = todayMs;
+            console.log(`[voice] Date was in the future, reset to now: ${fixedDate}`);
+          }
+        } else {
+          fixedDate = todayMs;
         }
-        // If date is still unreasonable (more than 1 day in the future), use now
-        if (parsed.date > todayMs + 86400000) {
-          parsed.date = todayMs;
-          console.log(`[voice] Date was in the future, reset to now: ${parsed.date}`);
-        }
-      } else {
-        parsed.date = todayMs;
-      }
 
-      // Match category
-      const matchedCategory = userCategories.find(
-        (c) => c.name.toLowerCase() === parsed.categoryName.toLowerCase()
-      ) || userCategories.find((c) => c.name.toLowerCase().includes(parsed.categoryName.toLowerCase())) || userCategories[userCategories.length - 1]; // fallback to "Другое"
+        const cat = matchCategory(tx.categoryName);
+        const bg = tx.budgetContext === "work" ? matchBusinessGroup(tx.businessGroupName) : null;
 
-      // Match business group if budgetContext is "work"
-      let matchedBusinessGroup: { id: number; name: string } | null = null;
-      if (parsed.budgetContext === "work" && parsed.businessGroupName) {
-        const bgName = (parsed.businessGroupName as string).toLowerCase();
-        matchedBusinessGroup = userBusinessGroups.find(
-          (g) => g.name.toLowerCase() === bgName
-        ) || userBusinessGroups.find(
-          (g) => g.name.toLowerCase().includes(bgName) || bgName.includes(g.name.toLowerCase())
-        ) || null;
-      }
+        return {
+          type: tx.type,
+          amount: tx.amount,
+          currency: tx.currency,
+          categoryId: cat?.id,
+          categoryName: cat?.name || tx.categoryName,
+          categoryIcon: cat?.icon || "📦",
+          description: tx.description,
+          date: fixedDate,
+          budgetContext: tx.budgetContext || ctx.user.defaultBudget || "personal",
+          isFamily: tx.budgetContext === "family",
+          isWork: tx.budgetContext === "work",
+          businessGroupId: bg?.id ?? null,
+          detectedBusinessGroupName: tx.businessGroupName || null,
+        };
+      });
 
+      // Backward-compatible response: if single transaction, also include flat `parsed` field
+      const firstTx = enrichedTransactions[0];
       return {
         transcription: transcription.text,
         language: parsed.language || transcription.language,
-        parsed: {
-          ...parsed,
-          categoryId: matchedCategory?.id,
-          categoryName: matchedCategory?.name || parsed.categoryName,
-          categoryIcon: matchedCategory?.icon || "📦",
-          budgetContext: parsed.budgetContext || ctx.user.defaultBudget || "personal",
-          isFamily: parsed.budgetContext === "family",
-          isWork: parsed.budgetContext === "work",
-          businessGroupId: matchedBusinessGroup?.id ?? null,
-          detectedBusinessGroupName: parsed.businessGroupName || null,
+        // Multi-transaction array (new)
+        transactions: enrichedTransactions,
+        // Single-transaction backward compat (old clients)
+        parsed: firstTx ? {
+          ...firstTx,
+          language: parsed.language || transcription.language,
+        } : {
+          type: "expense" as const,
+          amount: 0,
+          currency: ctx.user.preferredCurrency || "AZN",
+          categoryName: "Другое",
+          categoryIcon: "📦",
+          description: "",
+          date: todayMs,
+          language: parsed.language || transcription.language,
+          budgetContext: ctx.user.defaultBudget || "personal",
+          isFamily: false,
+          isWork: false,
+          businessGroupId: null,
+          detectedBusinessGroupName: null,
         },
         rawTranscription: transcription.text,
       };
@@ -594,6 +660,8 @@ Always return a transactions array, even for a single receipt (array with one it
             date: z.number(),
             isFamily: z.boolean().default(false),
             familyGroupId: z.number().optional().nullable(),
+            isWork: z.boolean().default(false),
+            businessGroupId: z.number().optional().nullable(),
           })
         ),
       })
@@ -633,7 +701,9 @@ Always return a transactions array, even for a single receipt (array with one it
         await createTransaction({
           ...tx,
           userId: ctx.user.id,
-          familyGroupId: tx.familyGroupId ?? null,
+          familyGroupId: tx.isFamily ? (tx.familyGroupId ?? null) : null,
+          isWork: tx.isWork ?? false,
+          businessGroupId: tx.isWork ? (tx.businessGroupId ?? null) : null,
         });
         saved.push(i);
       }

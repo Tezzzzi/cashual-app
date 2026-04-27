@@ -4,26 +4,30 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
+type ParsedTransaction = {
+  type: "income" | "expense";
+  amount: number;
+  currency: string;
+  categoryId?: number;
+  categoryName: string;
+  categoryIcon: string;
+  description: string;
+  date: number;
+  language?: string;
+  budgetContext?: "personal" | "family" | "work";
+  isFamily?: boolean;
+  isWork?: boolean;
+  businessGroupId?: number | null;
+  detectedBusinessGroupName?: string | null;
+};
+
 type VoiceRecorderProps = {
   onResult: (data: {
     transcription: string;
-    parsed: {
-      type: "income" | "expense";
-      amount: number;
-      currency: string;
-      categoryId?: number;
-      categoryName: string;
-      categoryIcon: string;
-      description: string;
-      date: number;
-      language: string;
-      budgetContext?: "personal" | "family" | "work";
-      isFamily?: boolean;
-      isWork?: boolean;
-      businessGroupId?: number | null;
-      detectedBusinessGroupName?: string | null;
-    };
+    parsed: ParsedTransaction;
+    transactions?: ParsedTransaction[];
     rawTranscription: string;
+    language?: string;
   }) => void;
   language?: string;
 };

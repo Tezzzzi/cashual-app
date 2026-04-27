@@ -21,7 +21,9 @@ import {
 import VoiceRecorder from "@/components/VoiceRecorder";
 import TransactionForm from "@/components/TransactionForm";
 import ReceiptScanner from "@/components/ReceiptScanner";
+import MultiTransactionReview, { type ReviewTransaction } from "@/components/MultiTransactionReview";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { toast } from "sonner";
 
 export default function Home() {
   const { user, loading, isAuthenticated, error, authState } = useTelegramAuth();
@@ -29,6 +31,10 @@ export default function Home() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showReceiptScanner, setShowReceiptScanner] = useState(false);
   const [voiceResult, setVoiceResult] = useState<any>(null);
+  // Multi-transaction voice state
+  const [showMultiVoiceDialog, setShowMultiVoiceDialog] = useState(false);
+  const [multiVoiceTransactions, setMultiVoiceTransactions] = useState<ReviewTransaction[]>([]);
+  const [voiceTranscription, setVoiceTranscription] = useState<string>("");
   const utils = trpc.useUtils();
 
   const { data: summary, isLoading: summaryLoading } =
@@ -40,9 +46,68 @@ export default function Home() {
       { enabled: isAuthenticated }
     );
 
+  const saveMultiMutation = trpc.voice.saveReceiptTransactions.useMutation({
+    onSuccess: (result) => {
+      utils.transactions.list.invalidate();
+      utils.reports.summary.invalidate();
+      const msg =
+        result.skipped > 0
+          ? `${t("transaction_added")}: ${result.saved} (${result.skipped} duplicates skipped)`
+          : `${t("transaction_added")}: ${result.saved}`;
+      toast.success(msg);
+      setShowMultiVoiceDialog(false);
+      setMultiVoiceTransactions([]);
+      setVoiceTranscription("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const handleVoiceResult = (result: any) => {
-    setVoiceResult(result);
-    setShowAddDialog(true);
+    // Check if multi-transaction response (new format)
+    const transactions = result.transactions;
+    if (transactions && transactions.length > 1) {
+      // Multiple transactions detected — show multi-transaction review
+      setMultiVoiceTransactions(
+        transactions.map((tx: any) => ({
+          type: tx.type,
+          amount: tx.amount,
+          currency: tx.currency,
+          categoryId: tx.categoryId,
+          categoryName: tx.categoryName,
+          categoryIcon: tx.categoryIcon || "📦",
+          description: tx.description,
+          date: tx.date,
+          budgetContext: tx.budgetContext,
+          isFamily: tx.isFamily,
+          isWork: tx.isWork,
+          businessGroupId: tx.businessGroupId,
+          detectedBusinessGroupName: tx.detectedBusinessGroupName,
+        }))
+      );
+      setVoiceTranscription(result.transcription || result.rawTranscription || "");
+      setShowMultiVoiceDialog(true);
+    } else {
+      // Single transaction — use existing TransactionForm flow
+      setVoiceResult(result);
+      setShowAddDialog(true);
+    }
+  };
+
+  const handleSaveMultiVoice = (
+    transactions: Array<{
+      categoryId: number;
+      type: "income" | "expense";
+      amount: string;
+      currency: string;
+      description: string;
+      date: number;
+      isFamily: boolean;
+      familyGroupId: number | null;
+      isWork: boolean;
+      businessGroupId: number | null;
+    }>
+  ) => {
+    saveMultiMutation.mutate({ transactions });
   };
 
   // Loading state
@@ -250,7 +315,27 @@ export default function Home() {
         }}
       />
 
-      {/* Add Transaction Dialog */}
+      {/* Multi-Transaction Voice Review Dialog */}
+      <Dialog open={showMultiVoiceDialog} onOpenChange={setShowMultiVoiceDialog}>
+        <DialogContent className="max-w-md mx-auto max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t("confirm_transaction") || "Confirm transactions"}</DialogTitle>
+          </DialogHeader>
+          <MultiTransactionReview
+            transactions={multiVoiceTransactions}
+            transcription={voiceTranscription}
+            onSave={handleSaveMultiVoice}
+            onCancel={() => {
+              setShowMultiVoiceDialog(false);
+              setMultiVoiceTransactions([]);
+              setVoiceTranscription("");
+            }}
+            isSaving={saveMultiMutation.isPending}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Transaction Dialog (single transaction) */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-md mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
