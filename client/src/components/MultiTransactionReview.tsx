@@ -12,11 +12,13 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   Save,
   Trash2,
   Briefcase,
   Users,
   User,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -46,11 +48,21 @@ type BudgetSelection = {
   businessGroupId: number | null;
 };
 
+type DuplicateInfo = {
+  index: number;
+  existingDescription: string;
+  existingAmount: string;
+  existingDate: number;
+};
+
 type MultiTransactionReviewProps = {
   transactions: ReviewTransaction[];
   imageType?: "bank_screenshot" | "store_receipt" | "other";
   previewUrl?: string | null;
   transcription?: string | null;
+  imageCount?: number;
+  duplicateIndices?: Set<number>;
+  duplicateInfos?: DuplicateInfo[];
   onSave: (
     transactions: Array<{
       categoryId: number;
@@ -74,6 +86,9 @@ export default function MultiTransactionReview({
   imageType,
   previewUrl,
   transcription,
+  imageCount,
+  duplicateIndices = new Set(),
+  duplicateInfos = [],
   onSave,
   onCancel,
   isSaving = false,
@@ -83,9 +98,21 @@ export default function MultiTransactionReview({
   const { data: familyGroups } = trpc.family.myGroups.useQuery();
   const { data: businessGroups } = trpc.business.myGroups.useQuery();
 
+  // Initialize selected indices: all selected EXCEPT duplicates
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(
-    new Set(transactions.map((_, i) => i))
+    new Set(transactions.map((_, i) => i).filter((i) => !duplicateIndices.has(i)))
   );
+
+  // Update selection when duplicateIndices changes (async load)
+  useEffect(() => {
+    if (duplicateIndices.size > 0) {
+      setSelectedIndices((prev) => {
+        const next = new Set(prev);
+        duplicateIndices.forEach((i) => next.delete(i));
+        return next;
+      });
+    }
+  }, [duplicateIndices]);
 
   // Per-transaction budget selections
   const [budgetSelections, setBudgetSelections] = useState<Map<number, BudgetSelection>>(
@@ -125,7 +152,6 @@ export default function MultiTransactionReview({
 
     setBudgetSelections(initial);
 
-    // Set bulk mode to the most common budget among transactions
     const modes = Array.from(initial.values()).map((b) => b.budgetMode);
     const modeCounts = { personal: 0, family: 0, work: 0 };
     modes.forEach((m) => modeCounts[m]++);
@@ -162,7 +188,6 @@ export default function MultiTransactionReview({
     });
   };
 
-  // Apply bulk budget to all selected transactions
   const applyBulkBudget = () => {
     setBudgetSelections((prev) => {
       const next = new Map(prev);
@@ -249,7 +274,6 @@ export default function MultiTransactionReview({
     );
   };
 
-  // Cycle budget mode for a single transaction when tapping the badge
   const cycleBudget = (idx: number) => {
     const current = getBudget(idx);
     const modes: Array<"personal" | "family" | "work"> = ["personal"];
@@ -275,9 +299,11 @@ export default function MultiTransactionReview({
     other: "📄 Document",
   };
 
+  const dupeCount = duplicateIndices.size;
+
   return (
     <div className="space-y-3">
-      {/* Header: image preview or transcription */}
+      {/* Header */}
       <div className="flex gap-3 items-start">
         {previewUrl && (
           <div className="w-14 h-14 rounded-lg overflow-hidden border border-border flex-shrink-0">
@@ -294,6 +320,11 @@ export default function MultiTransactionReview({
           {imageType && (
             <p className="text-xs text-muted-foreground">{imageTypeLabel[imageType]}</p>
           )}
+          {imageCount && imageCount > 1 && (
+            <p className="text-xs text-muted-foreground">
+              {imageCount} {t("images_processed") || "images processed"}
+            </p>
+          )}
           {transcription && (
             <p className="text-xs text-muted-foreground italic truncate">"{transcription}"</p>
           )}
@@ -303,6 +334,21 @@ export default function MultiTransactionReview({
           </p>
         </div>
       </div>
+
+      {/* Duplicate warning banner */}
+      {dupeCount > 0 && (
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20">
+          <Copy className="h-4 w-4 text-orange-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-medium text-orange-400">
+              {dupeCount} {t("potential_duplicates") || "potential duplicate(s) found"}
+            </p>
+            <p className="text-[10px] text-orange-400/70 mt-0.5">
+              {t("duplicates_unchecked") || "Duplicates are unchecked by default. Check them if you want to save anyway."}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Bulk budget selector */}
       {(hasFamilyGroups || hasBusinessGroups) && (
@@ -343,7 +389,6 @@ export default function MultiTransactionReview({
               </Button>
             )}
 
-            {/* Group selector for bulk */}
             {bulkBudgetMode === "work" && hasBusinessGroups && (
               <Select value={bulkBusinessGroupId} onValueChange={setBulkBusinessGroupId}>
                 <SelectTrigger className="h-7 text-xs w-auto min-w-[100px]">
@@ -393,12 +438,16 @@ export default function MultiTransactionReview({
       <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
         {transactions.map((tx, i) => {
           const isSelected = selectedIndices.has(i);
+          const isDuplicate = duplicateIndices.has(i);
+          const dupeInfo = duplicateInfos.find((d) => d.index === i);
           const budget = getBudget(i);
           return (
             <div
               key={i}
               className={`p-2.5 rounded-lg border transition-all ${
-                isSelected
+                isDuplicate && !isSelected
+                  ? "border-orange-500/30 bg-orange-500/5 opacity-60"
+                  : isSelected
                   ? "border-primary/50 bg-primary/5"
                   : "border-border bg-muted/30 opacity-50"
               }`}
@@ -408,7 +457,7 @@ export default function MultiTransactionReview({
                 <div
                   onClick={() => toggleSelect(i)}
                   className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center cursor-pointer ${
-                    isSelected ? "border-primary bg-primary" : "border-muted-foreground"
+                    isSelected ? "border-primary bg-primary" : isDuplicate ? "border-orange-500" : "border-muted-foreground"
                   }`}
                 >
                   {isSelected && <span className="text-[8px] text-primary-foreground font-bold">✓</span>}
@@ -438,6 +487,16 @@ export default function MultiTransactionReview({
                 </div>
               </div>
 
+              {/* Duplicate warning for this item */}
+              {isDuplicate && dupeInfo && (
+                <div className="mt-1.5 ml-6 flex items-center gap-1.5 px-2 py-1 rounded bg-orange-500/10">
+                  <AlertTriangle className="h-3 w-3 text-orange-400 flex-shrink-0" />
+                  <span className="text-[10px] text-orange-400">
+                    {t("duplicate_exists") || "Possible duplicate"}: {dupeInfo.existingDescription} · {parseFloat(dupeInfo.existingAmount).toFixed(2)} · {new Date(dupeInfo.existingDate).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+
               {/* Budget badge row — tap to cycle */}
               {isSelected && (hasFamilyGroups || hasBusinessGroups) && (
                 <div className="mt-1.5 flex items-center gap-1.5 ml-6">
@@ -449,7 +508,6 @@ export default function MultiTransactionReview({
                     {budgetBadge(budget)}
                   </span>
 
-                  {/* Inline company selector for work budget */}
                   {budget.budgetMode === "work" && hasBusinessGroups && (
                     <Select
                       value={budget.businessGroupId?.toString() || ""}

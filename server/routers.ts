@@ -710,6 +710,63 @@ Always return a transactions array, even for a single receipt (array with one it
 
       return { saved: saved.length, skipped: skipped.length, skippedIndices: skipped };
     }),
+
+  // ─── Check Duplicates (pre-save UI check) ─────────────────────────
+  checkDuplicates: protectedProcedure
+    .input(
+      z.object({
+        transactions: z.array(
+          z.object({
+            amount: z.string(),
+            description: z.string().optional(),
+            date: z.number(),
+            type: z.enum(["income", "expense"]),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Fetch recent transactions for duplicate detection (last 90 days)
+      const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+      const existing = await getTransactions(ctx.user.id, {
+        startDate: ninetyDaysAgo,
+        limit: 500,
+      });
+
+      const duplicates: Array<{
+        index: number;
+        existingDescription: string;
+        existingAmount: string;
+        existingDate: number;
+      }> = [];
+
+      for (let i = 0; i < input.transactions.length; i++) {
+        const tx = input.transactions[i];
+        const txAmount = parseFloat(tx.amount);
+
+        const match = existing.find((e) => {
+          const existingAmount = parseFloat(e.transaction.amount);
+          const amountMatch = Math.abs(existingAmount - txAmount) < 0.01;
+          const descMatch =
+            tx.description &&
+            e.transaction.description &&
+            e.transaction.description.toLowerCase().trim() === tx.description.toLowerCase().trim();
+          const dateMatch = Math.abs(e.transaction.date - tx.date) < 24 * 60 * 60 * 1000;
+          return amountMatch && descMatch && dateMatch;
+        });
+
+        if (match) {
+          duplicates.push({
+            index: i,
+            existingDescription: match.transaction.description || "",
+            existingAmount: match.transaction.amount,
+            existingDate: match.transaction.date,
+          });
+        }
+      }
+
+      return { duplicates };
+    }),
 });
 
 // ─── Reports Router ──────────────────────────────────────────────────
