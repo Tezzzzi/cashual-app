@@ -36,6 +36,7 @@ import {
 } from "./db";
 import { transcribeAudio } from "./_core/openai-whisper";
 import { invokeLLM } from "./_core/openai-llm";
+import { convertCurrency } from "./exchange-rates";
 
 // Seed preset categories on startup
 seedPresetCategories().catch(console.error);
@@ -136,8 +137,31 @@ const transactionsRouter = router({
         const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
         if (!isMember) throw new TRPCError({ code: "FORBIDDEN", message: "Not a group member" });
       }
+
+      // Multi-currency conversion: convert to user's preferred currency
+      const userCurrency = ctx.user.preferredCurrency || "AZN";
+      const inputCurrency = input.currency || userCurrency;
+      const inputAmount = parseFloat(input.amount);
+      let finalAmount = input.amount;
+      let originalAmount: string | null = null;
+      let originalCurrency: string | null = null;
+      let exchangeRate: string | null = null;
+
+      if (inputCurrency.toUpperCase() !== userCurrency.toUpperCase()) {
+        const conversion = await convertCurrency(inputAmount, inputCurrency, userCurrency, input.date);
+        finalAmount = conversion.convertedAmount.toFixed(2);
+        originalAmount = inputAmount.toFixed(2);
+        originalCurrency = inputCurrency.toUpperCase();
+        exchangeRate = conversion.exchangeRate.toFixed(8);
+      }
+
       return createTransaction({
         ...input,
+        amount: finalAmount,
+        currency: userCurrency,
+        originalAmount,
+        originalCurrency,
+        exchangeRate,
         userId: ctx.user.id,
         familyGroupId: input.isFamily ? (input.familyGroupId ?? null) : null,
         isWork: input.isWork ?? false,
@@ -164,7 +188,6 @@ const transactionsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
       // Normalize: if isWork is explicitly set to false, clear businessGroupId
-      // to prevent stale businessGroupId from leaking into work reports
       if (data.isWork === false) {
         data.businessGroupId = null;
       }
@@ -172,7 +195,30 @@ const transactionsRouter = router({
       if (data.isFamily === false) {
         data.familyGroupId = null;
       }
-      await updateTransaction(id, ctx.user.id, data);
+
+      // Multi-currency conversion on update: if amount and currency are both provided
+      const updateData: Record<string, unknown> = { ...data };
+      if (data.amount && data.currency) {
+        const userCurrency = ctx.user.preferredCurrency || "AZN";
+        const inputCurrency = data.currency;
+        const inputAmount = parseFloat(data.amount);
+
+        if (inputCurrency.toUpperCase() !== userCurrency.toUpperCase()) {
+          const conversion = await convertCurrency(inputAmount, inputCurrency, userCurrency, data.date);
+          updateData.amount = conversion.convertedAmount.toFixed(2);
+          updateData.currency = userCurrency;
+          updateData.originalAmount = inputAmount.toFixed(2);
+          updateData.originalCurrency = inputCurrency.toUpperCase();
+          updateData.exchangeRate = conversion.exchangeRate.toFixed(8);
+        } else {
+          // Same currency: clear conversion fields
+          updateData.originalAmount = null;
+          updateData.originalCurrency = null;
+          updateData.exchangeRate = null;
+        }
+      }
+
+      await updateTransaction(id, ctx.user.id, updateData as any);
       return { success: true };
     }),
 
@@ -243,7 +289,16 @@ Rules for EACH transaction:
 - Determine if it's income or expense from context
 - Match to the closest available category name
 - Extract the amount (number only)
-- Determine the currency (default: ${ctx.user.preferredCurrency || "AZN"})
+- Determine the currency from context clues:
+  * "манат" / "manat" / "AZN" → AZN
+  * "доллар" / "dollar" / "бакс" / "USD" → USD
+  * "евро" / "euro" / "EUR" → EUR
+  * "рубль" / "рублей" / "руб" / "RUB" → RUB
+  * "лира" / "TRY" → TRY
+  * "фунт" / "pound" / "GBP" → GBP
+  * "лари" / "GEL" → GEL
+  * "франк" / "CHF" → CHF
+  * If no currency mentioned, default to: ${ctx.user.preferredCurrency || "AZN"}
 - Create a short description
 - If no specific date mentioned, use today's timestamp: ${todayMs}
 - The date field MUST be a Unix timestamp in milliseconds in the year ${currentYear}
@@ -698,8 +753,29 @@ Always return a transactions array, even for a single receipt (array with one it
           continue;
         }
 
+        // Multi-currency conversion
+        const userCurrency = ctx.user.preferredCurrency || "AZN";
+        const txCurrency = tx.currency || userCurrency;
+        let finalAmount = tx.amount;
+        let originalAmount: string | null = null;
+        let originalCurrency: string | null = null;
+        let txExchangeRate: string | null = null;
+
+        if (txCurrency.toUpperCase() !== userCurrency.toUpperCase()) {
+          const conversion = await convertCurrency(txAmount, txCurrency, userCurrency, tx.date);
+          finalAmount = conversion.convertedAmount.toFixed(2);
+          originalAmount = txAmount.toFixed(2);
+          originalCurrency = txCurrency.toUpperCase();
+          txExchangeRate = conversion.exchangeRate.toFixed(8);
+        }
+
         await createTransaction({
           ...tx,
+          amount: finalAmount,
+          currency: userCurrency,
+          originalAmount,
+          originalCurrency,
+          exchangeRate: txExchangeRate,
           userId: ctx.user.id,
           familyGroupId: tx.isFamily ? (tx.familyGroupId ?? null) : null,
           isWork: tx.isWork ?? false,
@@ -883,13 +959,16 @@ const reportsRouter = router({
         limit: 5000,
       });
 
-      const header = "Date,Type,Category,Amount,Currency,Description,Family,Work,Company\n";
+      const header = "Date,Type,Category,Amount,Currency,Original Amount,Original Currency,Exchange Rate,Description,Family,Work,Company\n";
       const rows = txns
         .map((t) => {
           const date = new Date(t.transaction.date).toISOString().split("T")[0];
           const desc = (t.transaction.description || "").replace(/"/g, '""');
           const catName = (t.categoryName || "").replace(/"/g, '""');
-          return `${date},${t.transaction.type},"${catName}",${t.transaction.amount},${t.transaction.currency},"${desc}",${t.transaction.isFamily ? "Yes" : "No"},${t.transaction.isWork ? "Yes" : "No"},""`;
+          const origAmt = t.transaction.originalAmount || "";
+          const origCur = t.transaction.originalCurrency || "";
+          const exRate = t.transaction.exchangeRate || "";
+          return `${date},${t.transaction.type},"${catName}",${t.transaction.amount},${t.transaction.currency},${origAmt},${origCur},${exRate},"${desc}",${t.transaction.isFamily ? "Yes" : "No"},${t.transaction.isWork ? "Yes" : "No"},""`;
         })
         .join("\n");
 

@@ -51,6 +51,18 @@ try {
       console.log('[startup] Added businessGroupId column to transactions');
     }
 
+    // Migration 0004: Multi-currency support columns
+    const [origAmtCols] = await migConn.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'transactions' AND COLUMN_NAME = 'originalAmount'`
+    );
+    if (origAmtCols.length === 0) {
+      await migConn.execute(`ALTER TABLE \`transactions\` ADD \`originalAmount\` decimal(12,2) DEFAULT NULL`);
+      await migConn.execute(`ALTER TABLE \`transactions\` ADD \`originalCurrency\` varchar(10) DEFAULT NULL`);
+      await migConn.execute(`ALTER TABLE \`transactions\` ADD \`exchangeRate\` decimal(16,8) DEFAULT NULL`);
+      console.log('[startup] Added multi-currency columns (originalAmount, originalCurrency, exchangeRate)');
+    }
+
     await migConn.end();
     console.log('[startup] Database migrations complete');
   }

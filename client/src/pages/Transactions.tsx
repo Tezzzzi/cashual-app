@@ -63,6 +63,12 @@ export default function Transactions() {
   });
   const hasBusiness = (businessGroups?.length ?? 0) > 0;
 
+  // Fetch current user for preferredCurrency
+  const { data: currentUser } = trpc.auth.me.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const userCurrency = currentUser?.preferredCurrency || "AZN";
+
   // Build query params
   const listParams = useMemo(() => {
     const base: Record<string, any> = {
@@ -120,6 +126,37 @@ export default function Transactions() {
     { key: "partner", label: t("scope_partner") },
     { key: "all", label: t("scope_all") },
   ];
+
+  // Helper: format amount with dual currency display
+  const formatAmount = (txn: any) => {
+    const mainAmount = parseFloat(txn.amount).toLocaleString("ru-RU", {
+      minimumFractionDigits: 2,
+    });
+    const sign = txn.type === "income" ? "+" : "-";
+    const origAmount = txn.originalAmount ? parseFloat(txn.originalAmount) : null;
+    const origCurrency = txn.originalCurrency;
+
+    // Show dual display if original currency differs from user's default
+    if (origAmount && origCurrency && origCurrency.toUpperCase() !== userCurrency.toUpperCase()) {
+      const origFormatted = origAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 });
+      return (
+        <div className="text-right">
+          <p className={`text-sm font-semibold ${txn.type === "income" ? "text-income" : "text-expense"}`}>
+            {sign}{mainAmount} {userCurrency}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {sign}{origFormatted} {origCurrency}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <p className={`text-sm font-semibold ${txn.type === "income" ? "text-income" : "text-expense"}`}>
+        {sign}{mainAmount}
+      </p>
+    );
+  };
 
   return (
     <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto pb-24">
@@ -263,18 +300,9 @@ export default function Transactions() {
                 </p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <p
-                  className={`text-sm font-semibold mr-1 ${
-                    t_item.transaction.type === "income"
-                      ? "text-income"
-                      : "text-expense"
-                  }`}
-                >
-                  {t_item.transaction.type === "income" ? "+" : "-"}
-                  {parseFloat(t_item.transaction.amount).toLocaleString("ru-RU", {
-                    minimumFractionDigits: 2,
-                  })}
-                </p>
+                <div className="mr-1">
+                  {formatAmount(t_item.transaction)}
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -292,6 +320,8 @@ export default function Transactions() {
                       familyGroupId: t_item.transaction.familyGroupId,
                       isWork: t_item.transaction.isWork,
                       businessGroupId: t_item.transaction.businessGroupId,
+                      originalAmount: t_item.transaction.originalAmount,
+                      originalCurrency: t_item.transaction.originalCurrency,
                     })
                   }
                 >

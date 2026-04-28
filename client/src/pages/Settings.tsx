@@ -161,6 +161,10 @@ export default function Settings() {
             <SelectItem value="EUR">EUR — Euro</SelectItem>
             <SelectItem value="TRY">TRY — Lira</SelectItem>
             <SelectItem value="GEL">GEL — Lari</SelectItem>
+            <SelectItem value="GBP">GBP — Pound</SelectItem>
+            <SelectItem value="CHF">CHF — Franc</SelectItem>
+            <SelectItem value="UAH">UAH — Гривна</SelectItem>
+            <SelectItem value="KZT">KZT — Тенге</SelectItem>
           </SelectContent>
         </Select>
       </div>

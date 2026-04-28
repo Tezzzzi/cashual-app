@@ -64,6 +64,9 @@ export const transactions = mysqlTable("transactions", {
   familyGroupId: int("familyGroupId"), // null = personal
   isWork: boolean("isWork").default(false).notNull(), // tagged as business/work expense
   businessGroupId: int("businessGroupId"), // null = not a business expense
+  originalAmount: decimal("originalAmount", { precision: 12, scale: 2 }), // amount in original currency
+  originalCurrency: varchar("originalCurrency", { length: 10 }), // original currency code
+  exchangeRate: decimal("exchangeRate", { precision: 16, scale: 8 }), // conversion rate used
   sourceLanguage: varchar("sourceLanguage", { length: 10 }), // detected language
   rawTranscription: text("rawTranscription"), // original voice text
   createdAt: timestamp("createdAt").defaultNow().notNull(),

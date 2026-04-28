@@ -11,8 +11,10 @@ import {
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { ArrowDownCircle, ArrowUpCircle, Loader2 } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Loader2, ArrowRight } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+
+const SUPPORTED_CURRENCIES = ["AZN", "RUB", "USD", "EUR", "TRY", "GEL", "GBP", "CHF", "PLN", "CZK", "SEK", "NOK"];
 
 type TransactionFormProps = {
   initialData?: {
@@ -29,6 +31,8 @@ type TransactionFormProps = {
     businessGroupId?: number | null;
     sourceLanguage?: string;
     rawTranscription?: string;
+    originalAmount?: string | number | null;
+    originalCurrency?: string | null;
   };
   onSuccess?: () => void;
   onCancel?: () => void;
@@ -45,10 +49,15 @@ export default function TransactionForm({
   const [type, setType] = useState<"income" | "expense">(
     initialData?.type || "expense"
   );
-  const [amount, setAmount] = useState(
-    initialData?.amount?.toString() || ""
-  );
-  const [currency, setCurrency] = useState(initialData?.currency || "AZN");
+  // For editing: if there's an originalAmount, show that as the editable amount with originalCurrency
+  const [amount, setAmount] = useState(() => {
+    if (initialData?.originalAmount) return initialData.originalAmount.toString();
+    return initialData?.amount?.toString() || "";
+  });
+  const [currency, setCurrency] = useState(() => {
+    if (initialData?.originalCurrency) return initialData.originalCurrency;
+    return initialData?.currency || "AZN";
+  });
   const [categoryId, setCategoryId] = useState<string>(
     initialData?.categoryId?.toString() || ""
   );
@@ -78,11 +87,13 @@ export default function TransactionForm({
   const { data: currentUser } = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
 
+  const userCurrency = currentUser?.preferredCurrency || "AZN";
+  const isDifferentCurrency = currency.toUpperCase() !== userCurrency.toUpperCase();
+
   // Once familyGroups and user settings load, apply the default budget preference
   useEffect(() => {
     if (!familyGroups || familyGroups.length === 0) return;
     const firstGroup = familyGroups[0].group;
-    // Only set defaults if not already set from initialData
     if (initialData?.isFamily === undefined && initialData?.isWork === undefined) {
       const defaultToFamily = currentUser?.defaultBudget === "family";
       setIsFamily(defaultToFamily);
@@ -228,16 +239,26 @@ export default function TransactionForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="AZN">AZN</SelectItem>
-              <SelectItem value="RUB">RUB</SelectItem>
-              <SelectItem value="USD">USD</SelectItem>
-              <SelectItem value="EUR">EUR</SelectItem>
-              <SelectItem value="TRY">TRY</SelectItem>
-              <SelectItem value="GEL">GEL</SelectItem>
+              {SUPPORTED_CURRENCIES.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
       </div>
+
+      {/* Currency conversion note */}
+      {isDifferentCurrency && amount && parseFloat(amount) > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-sm">
+          <span className="text-blue-400 font-medium">
+            {parseFloat(amount).toFixed(2)} {currency}
+          </span>
+          <ArrowRight className="h-3 w-3 text-blue-400/60" />
+          <span className="text-muted-foreground">
+            {t("will_convert_to") || "will be converted to"} {userCurrency}
+          </span>
+        </div>
+      )}
 
       {/* Category */}
       <div>

@@ -281,18 +281,30 @@ export default function Home() {
                     {new Date(t_item.transaction.date).toLocaleDateString("ru-RU")}
                   </p>
                 </div>
-                <p
-                  className={`text-sm font-semibold ${
-                    t_item.transaction.type === "income"
-                      ? "text-income"
-                      : "text-expense"
-                  }`}
-                >
-                  {t_item.transaction.type === "income" ? "+" : "-"}
-                  {parseFloat(t_item.transaction.amount).toLocaleString("ru-RU", {
-                    minimumFractionDigits: 2,
-                  })}
-                </p>
+                <div className="text-right shrink-0">
+                  <p
+                    className={`text-sm font-semibold ${
+                      t_item.transaction.type === "income"
+                        ? "text-income"
+                        : "text-expense"
+                    }`}
+                  >
+                    {t_item.transaction.type === "income" ? "+" : "-"}
+                    {parseFloat(t_item.transaction.amount).toLocaleString("ru-RU", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </p>
+                  {t_item.transaction.originalCurrency &&
+                    t_item.transaction.originalCurrency !== (user?.preferredCurrency || "AZN") && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {t_item.transaction.type === "income" ? "+" : "-"}
+                      {parseFloat(t_item.transaction.originalAmount || "0").toLocaleString("ru-RU", {
+                        minimumFractionDigits: 2,
+                      })}{" "}
+                      {t_item.transaction.originalCurrency}
+                    </p>
+                  )}
+                </div>
               </div>
             ))}
           </div>
