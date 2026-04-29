@@ -33,7 +33,10 @@ import {
   createBusinessGroup,
   updateBusinessGroup,
   deleteBusinessGroup,
+  getDb,
 } from "./db";
+import { transactions, categories } from "../drizzle/schema";
+import { eq, and } from "drizzle-orm";
 import { transcribeAudio } from "./_core/openai-whisper";
 import { invokeLLM } from "./_core/openai-llm";
 import { convertCurrency } from "./exchange-rates";
@@ -1163,6 +1166,24 @@ const settingsRouter = router({
     .mutation(async ({ ctx, input }) => {
       await updateUserTelegram(ctx.user.id, input);
       return { success: true };
+    }),
+
+  deleteAllData: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
+
+      // Delete all user's transactions
+      const result = await db
+        .delete(transactions)
+        .where(eq(transactions.userId, ctx.user.id));
+
+      // Delete user's custom categories (keep presets)
+      await db
+        .delete(categories)
+        .where(and(eq(categories.userId, ctx.user.id), eq(categories.isPreset, false)));
+
+      return { success: true, deletedCount: (result as any)[0]?.affectedRows ?? 0 };
     }),
 });
 
