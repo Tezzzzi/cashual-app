@@ -76,6 +76,12 @@ const translations = {
     by_category: "По категориям",
     no_data: "Нет данных за выбранный период",
     export_csv: "CSV",
+    csv_download: "Скачать файл",
+    csv_send_telegram: "Отправить в Telegram",
+    csv_preview: "Предпросмотр",
+    csv_sent_telegram: "CSV отправлен в Telegram!",
+    csv_downloaded: "CSV скачан",
+    csv_rows: "записей",
 
     // Family
     family_title: "Семейный бюджет",
@@ -286,6 +292,12 @@ const translations = {
     by_category: "Kateqoriyaya görə",
     no_data: "Seçilmiş dövr üçün məlumat yoxdur",
     export_csv: "CSV",
+    csv_download: "Faylı yüklə",
+    csv_send_telegram: "Telegram-a göndər",
+    csv_preview: "Ön baxış",
+    csv_sent_telegram: "CSV Telegram-a göndərildi!",
+    csv_downloaded: "CSV yükləndi",
+    csv_rows: "qeyd",
 
     // Family
     family_title: "Ailə büdcəsi",
@@ -496,6 +508,12 @@ const translations = {
     by_category: "By Category",
     no_data: "No data for the selected period",
     export_csv: "CSV",
+    csv_download: "Download file",
+    csv_send_telegram: "Send to Telegram",
+    csv_preview: "Preview",
+    csv_sent_telegram: "CSV sent to Telegram!",
+    csv_downloaded: "CSV downloaded",
+    csv_rows: "rows",
 
     // Family
     family_title: "Family Budget",

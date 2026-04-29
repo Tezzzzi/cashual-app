@@ -37,6 +37,7 @@ import {
 import { transcribeAudio } from "./_core/openai-whisper";
 import { invokeLLM } from "./_core/openai-llm";
 import { convertCurrency } from "./exchange-rates";
+import { ENV } from "./_core/env";
 
 // Seed preset categories on startup
 seedPresetCategories().catch(console.error);
@@ -980,6 +981,75 @@ const reportsRouter = router({
         csv,
         filename: `transactions_${new Date().toISOString().split("T")[0]}.csv`,
       };
+    }),
+
+  sendCsvToTelegram: protectedProcedure
+    .input(
+      z
+        .object({
+          startDate: z.number().optional(),
+          endDate: z.number().optional(),
+          familyGroupId: z.number().optional(),
+        })
+        .optional()
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input?.familyGroupId) {
+        const isMember = await isGroupMember(input.familyGroupId, ctx.user.id);
+        if (!isMember) throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const telegramId = ctx.user.telegramId;
+      if (!telegramId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Telegram ID not found" });
+      }
+
+      const botToken = ENV.telegramBotToken;
+      if (!botToken) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Bot token not configured" });
+      }
+
+      // Generate CSV (same logic as exportCsv)
+      const txns = await getTransactions(ctx.user.id, {
+        ...input,
+        limit: 5000,
+      });
+
+      const header = "Date,Type,Category,Amount,Currency,Original Amount,Original Currency,Exchange Rate,Description,Family,Work,Company\n";
+      const rows = txns
+        .map((t) => {
+          const date = new Date(t.transaction.date).toISOString().split("T")[0];
+          const desc = (t.transaction.description || "").replace(/"/g, '""');
+          const catName = (t.categoryName || "").replace(/"/g, '""');
+          const origAmt = t.transaction.originalAmount || "";
+          const origCur = t.transaction.originalCurrency || "";
+          const exRate = t.transaction.exchangeRate || "";
+          return `${date},${t.transaction.type},"${catName}",${t.transaction.amount},${t.transaction.currency},${origAmt},${origCur},${exRate},"${desc}",${t.transaction.isFamily ? "Yes" : "No"},${t.transaction.isWork ? "Yes" : "No"},""`;
+        })
+        .join("\n");
+
+      const bom = "\uFEFF";
+      const csvContent = bom + header + rows;
+      const filename = `transactions_${new Date().toISOString().split("T")[0]}.csv`;
+
+      // Send via Telegram Bot API sendDocument
+      const formData = new FormData();
+      formData.append("chat_id", telegramId);
+      formData.append("document", new Blob([csvContent], { type: "text/csv;charset=utf-8" }), filename);
+      formData.append("caption", `\u{1F4CA} Cashual — ${txns.length} transactions`);
+
+      const response = await fetch(
+        `https://api.telegram.org/bot${botToken}/sendDocument`,
+        { method: "POST", body: formData }
+      );
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.error("[Telegram] sendDocument failed:", errBody);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to send file via Telegram" });
+      }
+
+      return { success: true, transactionCount: txns.length };
     }),
 });
 

@@ -11,6 +11,9 @@ import {
   TrendingUp,
   Users,
   Briefcase,
+  Send,
+  X,
+  Eye,
 } from "lucide-react";
 import {
   Select,
@@ -62,6 +65,8 @@ export default function Reports() {
   const [scope, setScope] = useState<Scope>("mine");
   const [budgetFilter, setBudgetFilter] = useState<BudgetFilter>("all");
   const [businessGroupFilter, setBusinessGroupFilter] = useState<string>("all");
+  const [showCsvMenu, setShowCsvMenu] = useState(false);
+  const [csvPreview, setCsvPreview] = useState<{ csv: string; filename: string } | null>(null);
 
   // Fetch family groups to determine if user has a family
   const { data: familyGroups } = trpc.family.myGroups.useQuery(undefined, {
@@ -122,10 +127,56 @@ export default function Reports() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast.success("CSV экспортирован");
+      toast.success(t("csv_downloaded"));
+      setShowCsvMenu(false);
     },
     onError: (err) => toast.error(err.message),
   });
+
+  const sendCsvToTelegram = trpc.reports.sendCsvToTelegram.useMutation({
+    onSuccess: (data) => {
+      toast.success(t("csv_sent_telegram"));
+      setShowCsvMenu(false);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const previewCsv = trpc.reports.exportCsv.useMutation({
+    onSuccess: (data) => {
+      setCsvPreview(data);
+      setShowCsvMenu(false);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Parse CSV string into rows for the preview table
+  const csvRows = useMemo(() => {
+    if (!csvPreview) return [];
+    const lines = csvPreview.csv.replace(/^\uFEFF/, "").split("\n").filter(Boolean);
+    return lines.map((line) => {
+      const row: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === "," && !inQuotes) {
+          row.push(current);
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+      row.push(current);
+      return row;
+    });
+  }, [csvPreview]);
 
   const pieData = useMemo(() => {
     if (!byCategory) return [];
@@ -163,26 +214,66 @@ export default function Reports() {
     { key: "all", label: t("scope_all") },
   ];
 
+  const isCsvBusy = exportCsv.isPending || sendCsvToTelegram.isPending || previewCsv.isPending;
+
   return (
     <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">{t("reports_title")}</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => exportCsv.mutate(range)}
-          disabled={exportCsv.isPending}
-        >
-          {exportCsv.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
+        <div className="relative">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCsvMenu(!showCsvMenu)}
+            disabled={isCsvBusy}
+          >
+            {isCsvBusy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <>
+                <Download className="h-3.5 w-3.5 mr-1" />
+                {t("export_csv")}
+              </>
+            )}
+          </Button>
+          {showCsvMenu && (
             <>
-              <Download className="h-3.5 w-3.5 mr-1" />
-              {t("export_csv")}
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowCsvMenu(false)}
+              />
+              {/* Dropdown menu */}
+              <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg py-1 min-w-[200px]">
+                <button
+                  className="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 hover:bg-accent transition-colors"
+                  onClick={() => exportCsv.mutate(range)}
+                  disabled={isCsvBusy}
+                >
+                  <Download className="h-4 w-4" />
+                  {t("csv_download")}
+                </button>
+                <button
+                  className="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 hover:bg-accent transition-colors"
+                  onClick={() => sendCsvToTelegram.mutate(range)}
+                  disabled={isCsvBusy}
+                >
+                  <Send className="h-4 w-4" />
+                  {t("csv_send_telegram")}
+                </button>
+                <button
+                  className="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 hover:bg-accent transition-colors"
+                  onClick={() => previewCsv.mutate(range)}
+                  disabled={isCsvBusy}
+                >
+                  <Eye className="h-4 w-4" />
+                  {t("csv_preview")}
+                </button>
+              </div>
             </>
           )}
-        </Button>
+        </div>
       </div>
 
       {/* Period Selector */}
@@ -415,6 +506,114 @@ export default function Reports() {
           <p className="text-sm text-muted-foreground">
             {t("no_data")}
           </p>
+        </div>
+      )}
+
+      {/* CSV Preview Modal — forced WHITE background with BLACK text */}
+      {csvPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div
+            className="w-[95vw] max-h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden"
+            style={{ backgroundColor: "#ffffff", color: "#000000" }}
+          >
+            {/* Header */}
+            <div
+              className="flex items-center justify-between px-4 py-3 border-b"
+              style={{ backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" }}
+            >
+              <h3 className="text-sm font-semibold" style={{ color: "#111827" }}>
+                {csvPreview.filename}
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  className="px-3 py-1.5 text-xs font-medium rounded-md"
+                  style={{ backgroundColor: "#2563eb", color: "#ffffff" }}
+                  onClick={() => {
+                    exportCsv.mutate(range);
+                    setCsvPreview(null);
+                  }}
+                >
+                  <Download className="h-3 w-3 inline mr-1" />
+                  {t("csv_download")}
+                </button>
+                <button
+                  className="px-3 py-1.5 text-xs font-medium rounded-md"
+                  style={{ backgroundColor: "#0088cc", color: "#ffffff" }}
+                  onClick={() => {
+                    sendCsvToTelegram.mutate(range);
+                    setCsvPreview(null);
+                  }}
+                >
+                  <Send className="h-3 w-3 inline mr-1" />
+                  Telegram
+                </button>
+                <button
+                  onClick={() => setCsvPreview(null)}
+                  className="p-1 rounded-full hover:bg-gray-200"
+                >
+                  <X className="h-4 w-4" style={{ color: "#374151" }} />
+                </button>
+              </div>
+            </div>
+            {/* Table */}
+            <div className="overflow-auto flex-1 p-2">
+              <table
+                className="w-full text-xs border-collapse"
+                style={{ color: "#000000" }}
+              >
+                {csvRows.length > 0 && (
+                  <thead>
+                    <tr>
+                      {csvRows[0].map((cell, i) => (
+                        <th
+                          key={i}
+                          className="px-2 py-1.5 text-left font-semibold whitespace-nowrap border"
+                          style={{
+                            backgroundColor: "#e5e7eb",
+                            color: "#111827",
+                            borderColor: "#d1d5db",
+                          }}
+                        >
+                          {cell}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {csvRows.slice(1).map((row, ri) => (
+                    <tr key={ri}>
+                      {row.map((cell, ci) => (
+                        <td
+                          key={ci}
+                          className="px-2 py-1 whitespace-nowrap border"
+                          style={{
+                            backgroundColor: ri % 2 === 0 ? "#ffffff" : "#f9fafb",
+                            color: "#000000",
+                            borderColor: "#e5e7eb",
+                          }}
+                        >
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {csvRows.length <= 1 && (
+                <p className="text-center py-8" style={{ color: "#6b7280" }}>
+                  {t("no_data")}
+                </p>
+              )}
+            </div>
+            {/* Footer */}
+            <div
+              className="px-4 py-2 text-xs border-t text-center"
+              style={{ backgroundColor: "#f3f4f6", color: "#6b7280", borderColor: "#e5e7eb" }}
+            >
+              {csvRows.length > 1 ? `${csvRows.length - 1} ${t("csv_rows")}` : ""}
+            </div>
+          </div>
         </div>
       )}
     </div>
