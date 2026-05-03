@@ -224,12 +224,19 @@ export default function TransactionForm({
         <div className="flex-1">
           <Label className="text-xs text-muted-foreground mb-1">{t("amount")}</Label>
           <Input
-            type="number"
+            type="text"
+            inputMode="decimal"
             placeholder="0.00"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => {
+              // Accept both comma and dot as decimal separator; normalize to dot
+              const raw = e.target.value.replace(/,/g, ".");
+              // Allow only digits and a single dot
+              if (/^\d*\.?\d*$/.test(raw)) {
+                setAmount(raw);
+              }
+            }}
             className="text-lg font-semibold h-12"
-            inputMode="decimal"
           />
         </div>
         <div className="w-24">
