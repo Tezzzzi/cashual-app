@@ -37,8 +37,19 @@ export default function Home() {
   const [voiceTranscription, setVoiceTranscription] = useState<string>("");
   const utils = trpc.useUtils();
 
+  // Fetch family groups so we can show the combined family balance
+  const { data: familyGroups } = trpc.family.myGroups.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const familyGroupId = familyGroups?.[0]?.group?.id;
+
+  // If the user is in a family group, show the combined balance (all members).
+  // Otherwise, show only their own balance.
   const { data: summary, isLoading: summaryLoading } =
-    trpc.reports.summary.useQuery(undefined, { enabled: isAuthenticated });
+    trpc.reports.summary.useQuery(
+      familyGroupId ? { familyGroupId, scope: "all" } : undefined,
+      { enabled: isAuthenticated }
+    );
 
   const { data: recentTxns, isLoading: txnsLoading } =
     trpc.transactions.list.useQuery(
@@ -182,7 +193,9 @@ export default function Home() {
 
       {/* Balance Card */}
       <div className="tg-card bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10">
-        <p className="text-xs text-muted-foreground mb-1">{t("total_balance")}</p>
+        <p className="text-xs text-muted-foreground mb-1">
+          {familyGroupId ? (t("family_balance") || "Семейный баланс") : t("total_balance")}
+        </p>
         <p className="text-3xl font-bold">
           {summaryLoading ? (
             <span className="inline-block w-32 h-9 bg-muted animate-pulse rounded" />
