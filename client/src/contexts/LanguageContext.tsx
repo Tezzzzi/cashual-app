@@ -232,6 +232,22 @@ const translations = {
     duplicates_skipped: "дубликатов пропущено",
     image_too_large: "Изображение слишком большое (макс 10МБ)",
     no_transactions_found: "Транзакции не найдены на изображениях",
+
+    // AI Advisor
+    nav_ai: "ИИ",
+    ai_title: "CA$HUAL AI",
+    ai_subtitle: "Финансовый ассистент",
+    ai_welcome_title: "Спросите о финансах",
+    ai_welcome_desc: "Задайте вопрос голосом или текстом — ИИ проанализирует ваши данные и даст ответ",
+    ai_suggestion_1: "Сколько я потратил за последний месяц?",
+    ai_suggestion_2: "Как мне сократить расходы?",
+    ai_suggestion_3: "Покажи расходы по категориям",
+    ai_thinking: "Анализирую...",
+    ai_error: "Ошибка ИИ. Попробуйте ещё раз.",
+    ai_input_placeholder: "Спросите о финансах...",
+    ai_recording: "Запись",
+    ai_recording_too_short: "Запись слишком короткая",
+    ai_no_mic: "Нет доступа к микрофону",
   },
 
   az: {
@@ -462,6 +478,22 @@ const translations = {
     duplicates_skipped: "dublikat keçildi",
     image_too_large: "Şəkil çox böyükdür (maks 10MB)",
     no_transactions_found: "Şəkillərdə əməliyyat tapılmadı",
+
+    // AI Advisor
+    nav_ai: "AI",
+    ai_title: "CA$HUAL AI",
+    ai_subtitle: "Maliyyə köməkçisi",
+    ai_welcome_title: "Maliyyə haqqında soruşun",
+    ai_welcome_desc: "Səslə və ya mətnlə sual verin — AI məlumatlarınızı təhlil edəcək",
+    ai_suggestion_1: "Son ay nə qədər xərcləmişəm?",
+    ai_suggestion_2: "Xərcləri necə azalda bilərəm?",
+    ai_suggestion_3: "Kateqoriyalara görə xərcləri göstər",
+    ai_thinking: "Təhlil edirəm...",
+    ai_error: "AI xətası. Yenidən cəhd edin.",
+    ai_input_placeholder: "Maliyyə haqqında soruşun...",
+    ai_recording: "Yazılır",
+    ai_recording_too_short: "Yazı çox qısadır",
+    ai_no_mic: "Mikrofona giriş yoxdur",
   },
 
   en: {
@@ -692,6 +724,22 @@ const translations = {
     duplicates_skipped: "duplicates skipped",
     image_too_large: "Image too large (max 10MB)",
     no_transactions_found: "No transactions found in images",
+
+    // AI Advisor
+    nav_ai: "AI",
+    ai_title: "CA$HUAL AI",
+    ai_subtitle: "Financial Assistant",
+    ai_welcome_title: "Ask about finances",
+    ai_welcome_desc: "Ask a question by voice or text — AI will analyze your data and respond",
+    ai_suggestion_1: "How much did I spend last month?",
+    ai_suggestion_2: "How can I reduce my expenses?",
+    ai_suggestion_3: "Show expenses by category",
+    ai_thinking: "Analyzing...",
+    ai_error: "AI error. Please try again.",
+    ai_input_placeholder: "Ask about finances...",
+    ai_recording: "Recording",
+    ai_recording_too_short: "Recording too short",
+    ai_no_mic: "No microphone access",
   },
 } as const;
 

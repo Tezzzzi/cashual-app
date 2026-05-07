@@ -32,6 +32,7 @@ export type InvokeParams = {
       strict?: boolean;
     };
   };
+  max_tokens?: number;
 };
 
 export type InvokeResult = {
@@ -85,7 +86,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const payload: Record<string, unknown> = {
     model: "gemini-2.5-flash",
     messages: params.messages,
-    max_tokens: 4096,
+    max_tokens: params.max_tokens || 4096,
   };
 
   if (params.response_format) {

@@ -17,6 +17,7 @@ const Reports = lazy(() => import("./pages/Reports"));
 const Family = lazy(() => import("./pages/Family"));
 const Business = lazy(() => import("./pages/Business"));
 const Settings = lazy(() => import("./pages/Settings"));
+const AiAdvisor = lazy(() => import("./pages/AiAdvisor"));
 
 function LazyFallback() {
   return (
@@ -33,6 +34,7 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/transactions" component={Transactions} />
         <Route path="/reports" component={Reports} />
+        <Route path="/ai" component={AiAdvisor} />
         <Route path="/family" component={Family} />
         <Route path="/business" component={Business} />
         <Route path="/settings" component={Settings} />

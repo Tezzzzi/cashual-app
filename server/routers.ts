@@ -1228,7 +1228,281 @@ const businessRouter = router({
     }),
 });
 
-// ─── Main Router ─────────────────────────────────────────────────────
+// ─── AI Advisor Router ────────────────────────────────────────────────────────
+const aiAdvisorRouter = router({
+  ask: protectedProcedure
+    .input(
+      z.object({
+        question: z.string().min(1).max(2000),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const userCurrency = (ctx.user as any).preferredCurrency || "AZN";
+      const userLang = (ctx.user as any).preferredLanguage || "ru";
+
+      // Fetch user's transaction data for context (last 500 transactions)
+      const allTransactions = await getTransactions(userId, { limit: 500 });
+
+      // Fetch categories
+      const userCategories = await getCategories(userId);
+
+      // Fetch business groups
+      const businessGroupsList = await getBusinessGroups(userId);
+
+      // Fetch family groups
+      const familyGroupsList = await getFamilyGroupsByUserId(userId);
+
+      // Build a summary of transactions for the LLM
+      const now = Date.now();
+      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+      const ninetyDaysAgo = now - 90 * 24 * 60 * 60 * 1000;
+
+      // Compute summaries
+      const last30 = allTransactions.filter((t) => t.transaction.date >= thirtyDaysAgo);
+      const last90 = allTransactions.filter((t) => t.transaction.date >= ninetyDaysAgo);
+
+      const income30 = last30
+        .filter((t) => t.transaction.type === "income")
+        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
+      const expense30 = last30
+        .filter((t) => t.transaction.type === "expense")
+        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
+
+      const income90 = last90
+        .filter((t) => t.transaction.type === "income")
+        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
+      const expense90 = last90
+        .filter((t) => t.transaction.type === "expense")
+        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
+
+      // Category breakdown for last 30 days
+      const categoryBreakdown30: Record<string, { total: number; count: number }> = {};
+      for (const t of last30.filter((t) => t.transaction.type === "expense")) {
+        const catName = t.categoryName || "Без категории";
+        if (!categoryBreakdown30[catName]) categoryBreakdown30[catName] = { total: 0, count: 0 };
+        categoryBreakdown30[catName].total += parseFloat(String(t.transaction.amount));
+        categoryBreakdown30[catName].count++;
+      }
+
+      // Build transaction list for context (last 100 for detail)
+      const recentTxList = allTransactions.slice(0, 100).map((t) => ({
+        date: new Date(t.transaction.date).toISOString().split("T")[0],
+        type: t.transaction.type,
+        amount: parseFloat(String(t.transaction.amount)),
+        currency: t.transaction.currency,
+        category: t.categoryName || "N/A",
+        description: t.transaction.description || "",
+        isWork: t.transaction.isWork,
+        isFamily: t.transaction.isFamily,
+        businessGroupId: t.transaction.businessGroupId,
+      }));
+
+      // Build context string
+      const contextData = JSON.stringify({
+        userCurrency,
+        totalTransactions: allTransactions.length,
+        summary30days: { income: income30, expense: expense30, balance: income30 - expense30 },
+        summary90days: { income: income90, expense: expense90, balance: income90 - expense90 },
+        categoryBreakdown30days: Object.entries(categoryBreakdown30)
+          .sort((a, b) => b[1].total - a[1].total)
+          .map(([name, data]) => ({ category: name, total: data.total, count: data.count })),
+        businessGroups: businessGroupsList.map((g) => ({ id: g.id, name: g.name })),
+        familyGroups: familyGroupsList.map((g) => ({ id: g.group.id, name: g.group.name })),
+        categories: userCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
+        recentTransactions: recentTxList,
+        currentDate: new Date().toISOString().split("T")[0],
+      });
+
+      // Determine response language instruction
+      const langInstruction =
+        userLang === "ru"
+          ? "Отвечай на русском языке."
+          : userLang === "az"
+            ? "Azərbaycan dilində cavab ver."
+            : "Respond in English.";
+
+      const systemPrompt = `You are CA$HUAL AI — a smart financial advisor and reporting assistant inside a personal finance app. You have access to the user's real transaction data.
+
+${langInstruction}
+
+Your capabilities:
+1. **Answer questions about spending/income** — analyze the user's data and give precise numbers with breakdowns
+2. **Generate reports** — summarize by period, category, budget type (personal/family/work)
+3. **Provide financial advice** — identify spending patterns, suggest savings, warn about overspending
+4. **Compare periods** — show differences between months/weeks
+5. **Calculate averages** — daily/weekly/monthly averages
+
+Formatting rules:
+- Use Markdown formatting for readability
+- Use **bold** for key numbers and totals
+- Use bullet points or numbered lists for breakdowns
+- Use emoji sparingly for visual appeal (💰 📈 📉 📊 ✅ ⚠️ 💡)
+- Keep responses concise but informative (max 500 words)
+- Always include specific numbers from the user's data
+- When giving advice, be practical and actionable
+- Currency: ${userCurrency}
+
+User's financial data context:
+${contextData}`;
+
+      const llmResult = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: input.question },
+        ],
+        max_tokens: 2048,
+      });
+
+      const response = llmResult.choices[0]?.message?.content;
+      if (!response) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI failed to generate response" });
+      }
+
+      return { response, question: input.question };
+    }),
+
+  transcribeAndAsk: protectedProcedure
+    .input(
+      z.object({
+        audioBase64: z.string(),
+        language: z.string().optional(),
+        mimeType: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Step 1: Transcribe audio
+      const audioBuffer = Buffer.from(input.audioBase64, "base64");
+      const transcription = await transcribeAudio({
+        audioBuffer,
+        language: input.language,
+        mimeType: input.mimeType,
+      });
+
+      if ("error" in transcription) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: transcription.error,
+        });
+      }
+
+      // Step 2: Use the transcribed text as the question
+      const question = transcription.text;
+
+      // Reuse the ask logic by calling it internally
+      const userId = ctx.user.id;
+      const userCurrency = (ctx.user as any).preferredCurrency || "AZN";
+      const userLang = (ctx.user as any).preferredLanguage || "ru";
+
+      const allTransactions = await getTransactions(userId, { limit: 500 });
+      const userCategories = await getCategories(userId);
+      const businessGroupsList = await getBusinessGroups(userId);
+      const familyGroupsList = await getFamilyGroupsByUserId(userId);
+
+      const now = Date.now();
+      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+      const ninetyDaysAgo = now - 90 * 24 * 60 * 60 * 1000;
+
+      const last30 = allTransactions.filter((t) => t.transaction.date >= thirtyDaysAgo);
+      const last90 = allTransactions.filter((t) => t.transaction.date >= ninetyDaysAgo);
+
+      const income30 = last30
+        .filter((t) => t.transaction.type === "income")
+        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
+      const expense30 = last30
+        .filter((t) => t.transaction.type === "expense")
+        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
+      const income90 = last90
+        .filter((t) => t.transaction.type === "income")
+        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
+      const expense90 = last90
+        .filter((t) => t.transaction.type === "expense")
+        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
+
+      const categoryBreakdown30: Record<string, { total: number; count: number }> = {};
+      for (const t of last30.filter((t) => t.transaction.type === "expense")) {
+        const catName = t.categoryName || "Без категории";
+        if (!categoryBreakdown30[catName]) categoryBreakdown30[catName] = { total: 0, count: 0 };
+        categoryBreakdown30[catName].total += parseFloat(String(t.transaction.amount));
+        categoryBreakdown30[catName].count++;
+      }
+
+      const recentTxList = allTransactions.slice(0, 100).map((t) => ({
+        date: new Date(t.transaction.date).toISOString().split("T")[0],
+        type: t.transaction.type,
+        amount: parseFloat(String(t.transaction.amount)),
+        currency: t.transaction.currency,
+        category: t.categoryName || "N/A",
+        description: t.transaction.description || "",
+        isWork: t.transaction.isWork,
+        isFamily: t.transaction.isFamily,
+        businessGroupId: t.transaction.businessGroupId,
+      }));
+
+      const contextData = JSON.stringify({
+        userCurrency,
+        totalTransactions: allTransactions.length,
+        summary30days: { income: income30, expense: expense30, balance: income30 - expense30 },
+        summary90days: { income: income90, expense: expense90, balance: income90 - expense90 },
+        categoryBreakdown30days: Object.entries(categoryBreakdown30)
+          .sort((a, b) => b[1].total - a[1].total)
+          .map(([name, data]) => ({ category: name, total: data.total, count: data.count })),
+        businessGroups: businessGroupsList.map((g) => ({ id: g.id, name: g.name })),
+        familyGroups: familyGroupsList.map((g) => ({ id: g.group.id, name: g.group.name })),
+        categories: userCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
+        recentTransactions: recentTxList,
+        currentDate: new Date().toISOString().split("T")[0],
+      });
+
+      const langInstruction =
+        userLang === "ru"
+          ? "Отвечай на русском языке."
+          : userLang === "az"
+            ? "Azərbaycan dilində cavab ver."
+            : "Respond in English.";
+
+      const systemPrompt = `You are CA$HUAL AI — a smart financial advisor and reporting assistant inside a personal finance app. You have access to the user's real transaction data.
+
+${langInstruction}
+
+Your capabilities:
+1. **Answer questions about spending/income** — analyze the user's data and give precise numbers with breakdowns
+2. **Generate reports** — summarize by period, category, budget type (personal/family/work)
+3. **Provide financial advice** — identify spending patterns, suggest savings, warn about overspending
+4. **Compare periods** — show differences between months/weeks
+5. **Calculate averages** — daily/weekly/monthly averages
+
+Formatting rules:
+- Use Markdown formatting for readability
+- Use **bold** for key numbers and totals
+- Use bullet points or numbered lists for breakdowns
+- Use emoji sparingly for visual appeal (💰 📈 📉 📊 ✅ ⚠️ 💡)
+- Keep responses concise but informative (max 500 words)
+- Always include specific numbers from the user's data
+- When giving advice, be practical and actionable
+- Currency: ${userCurrency}
+
+User's financial data context:
+${contextData}`;
+
+      const llmResult = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: question },
+        ],
+        max_tokens: 2048,
+      });
+
+      const response = llmResult.choices[0]?.message?.content;
+      if (!response) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI failed to generate response" });
+      }
+
+      return { response, question, transcription: transcription.text };
+    }),
+});
+
+// ─── Main Router ─────────────────────────────────────────────────────────────
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -1246,6 +1520,7 @@ export const appRouter = router({
   family: familyRouter,
   settings: settingsRouter,
   business: businessRouter,
+  aiAdvisor: aiAdvisorRouter,
 });
 
 export type AppRouter = typeof appRouter;

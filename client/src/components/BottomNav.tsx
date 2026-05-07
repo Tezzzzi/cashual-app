@@ -1,4 +1,4 @@
-import { Home, List, BarChart3, Users, Settings, Briefcase } from "lucide-react";
+import { Home, List, BarChart3, Users, Settings, Briefcase, Sparkles } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -10,6 +10,7 @@ export default function BottomNav() {
     { path: "/", icon: Home, label: t("nav_home") },
     { path: "/transactions", icon: List, label: t("nav_transactions") },
     { path: "/reports", icon: BarChart3, label: t("nav_reports") },
+    { path: "/ai", icon: Sparkles, label: t("nav_ai") },
     { path: "/family", icon: Users, label: t("nav_family") },
     { path: "/business", icon: Briefcase, label: t("nav_business") },
     { path: "/settings", icon: Settings, label: t("nav_settings") },
