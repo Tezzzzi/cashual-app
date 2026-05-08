@@ -135,11 +135,34 @@ export async function updateUserTelegram(
 export async function getCategories(userId: number) {
   const db = await getDb();
   if (!db) return [];
+
+  // Collect all family member IDs the user belongs to (across all groups)
+  const familyMemberRows = await db
+    .select({ memberId: familyGroupMembers.userId })
+    .from(familyGroupMembers)
+    .where(
+      inArray(
+        familyGroupMembers.familyGroupId,
+        db
+          .select({ id: familyGroupMembers.familyGroupId })
+          .from(familyGroupMembers)
+          .where(eq(familyGroupMembers.userId, userId))
+      )
+    );
+
+  // Build the set of user IDs whose categories should be visible
+  const visibleUserIds = Array.from(
+    new Set([userId, ...familyMemberRows.map((r) => r.memberId)])
+  );
+
   return db
     .select()
     .from(categories)
     .where(
-      sql`${categories.isPreset} = true OR ${categories.userId} = ${userId}`
+      sql`${categories.isPreset} = true OR ${categories.userId} IN (${sql.join(
+        visibleUserIds.map((id) => sql`${id}`),
+        sql`, `
+      )})`
     );
 }
 
