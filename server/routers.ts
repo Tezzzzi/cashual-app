@@ -337,7 +337,17 @@ CATEGORY MATCHING RULES (apply these strictly):
 - Salary, wage → use "Зарплата"
 - Freelance work payment → use "Фриланс"
 - Stock, crypto, investment → use "Инвестиции"
-- Anything else → use "Другое"
+- Vet, veterinary, pet care, pet food, pet supplies → NEW category "Питомцы" with emoji 🐾
+- Beauty salon, haircut, spa, manicure, pedicure, cosmetics → NEW category "Красота" with emoji 💅
+- Sports, gym, fitness, swimming pool, yoga → NEW category "Спорт" with emoji 🏋️
+- Education, course, tuition, books, school, university → NEW category "Образование" with emoji 📚
+- Charity, donation → NEW category "Благотворительность" with emoji 🤝
+- Car repair, car service, car wash, parking, fuel/gas → NEW category "Авто" with emoji 🚗
+- Furniture, home goods, home repair, renovation → NEW category "Дом" with emoji 🏠
+- Anything else that does NOT fit any category above → create a NEW category with a short descriptive name and an appropriate emoji
+
+NEW CATEGORY RULE: If the transaction does NOT match any existing category well, set categoryName to a NEW descriptive name (NOT "Другое") and set newCategoryEmoji to a single appropriate emoji. The system will auto-create this category for the user.
+If the transaction DOES match an existing category, set newCategoryEmoji to empty string "".
 
 Always return a transactions array, even for a single transaction (array with one item).`,
           },
@@ -363,13 +373,14 @@ Always return a transactions array, even for a single transaction (array with on
                       type: { type: "string", enum: ["income", "expense"], description: "Transaction type" },
                       amount: { type: "number", description: "Transaction amount" },
                       currency: { type: "string", description: "Currency code (AZN, USD, EUR, RUB, etc.)" },
-                      categoryName: { type: "string", description: "Best matching category name from the available list" },
+                      categoryName: { type: "string", description: "Best matching category name from the available list, OR a new descriptive name if nothing fits" },
+                      newCategoryEmoji: { type: "string", description: "Single emoji for a new category if categoryName is NOT in the available list. Empty string if using an existing category." },
                       description: { type: "string", description: "Short description of the transaction" },
                       date: { type: "number", description: "Unix timestamp in milliseconds" },
                       budgetContext: { type: "string", enum: ["personal", "family", "work"], description: "Detected budget context for THIS transaction" },
                       businessGroupName: { type: "string", description: "Company/project name if budgetContext is work, else empty string" },
                     },
-                    required: ["type", "amount", "currency", "categoryName", "description", "date", "budgetContext", "businessGroupName"],
+                    required: ["type", "amount", "currency", "categoryName", "newCategoryEmoji", "description", "date", "budgetContext", "businessGroupName"],
                     additionalProperties: false,
                   },
                 },
@@ -393,6 +404,7 @@ Always return a transactions array, even for a single transaction (array with on
           amount: number;
           currency: string;
           categoryName: string;
+          newCategoryEmoji: string;
           description: string;
           date: number;
           budgetContext: "personal" | "family" | "work";
@@ -400,13 +412,29 @@ Always return a transactions array, even for a single transaction (array with on
         }>;
       };
 
-      // Helper: match category
-      const matchCategory = (categoryName: string) => {
+      // Helper: find existing category (exact or partial match)
+      const findExistingCategory = (categoryName: string) => {
         return (
           userCategories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase()) ||
-          userCategories.find((c) => c.name.toLowerCase().includes(categoryName.toLowerCase())) ||
-          userCategories[userCategories.length - 1]
+          userCategories.find((c) => c.name.toLowerCase().includes(categoryName.toLowerCase()))
         );
+      };
+
+      // Helper: auto-create a new user category if it doesn't exist yet
+      const autoCreateCategory = async (name: string, emoji: string) => {
+        const existing = findExistingCategory(name);
+        if (existing) return existing;
+        const result = await createCategory({
+          name,
+          icon: emoji || "📦",
+          color: "#6366f1",
+          type: "both",
+          isPreset: false,
+          userId: ctx.user.id,
+        });
+        if (!result) return userCategories[userCategories.length - 1];
+        // Return a synthetic category object
+        return { id: result.id, name, icon: emoji || "📦", color: "#6366f1" };
       };
 
       // Helper: match business group
@@ -420,8 +448,8 @@ Always return a transactions array, even for a single transaction (array with on
         );
       };
 
-      // Process each transaction
-      const enrichedTransactions = parsed.transactions.map((tx) => {
+      // Process each transaction (async to support auto-category creation)
+      const enrichedTransactions = await Promise.all(parsed.transactions.map(async (tx) => {
         // Date validation
         let fixedDate = tx.date;
         if (fixedDate) {
@@ -440,7 +468,18 @@ Always return a transactions array, even for a single transaction (array with on
           fixedDate = todayMs;
         }
 
-        const cat = matchCategory(tx.categoryName);
+        // Resolve category: use existing or auto-create new one
+        let cat = findExistingCategory(tx.categoryName);
+        if (!cat && tx.newCategoryEmoji) {
+          // AI suggested a new category — auto-create it
+          console.log(`[voice] Auto-creating category: "${tx.categoryName}" ${tx.newCategoryEmoji}`);
+          cat = await autoCreateCategory(tx.categoryName, tx.newCategoryEmoji);
+        }
+        if (!cat) {
+          // Last resort fallback to "Другое" or last category
+          cat = userCategories.find((c) => c.name === "Другое") || userCategories[userCategories.length - 1];
+        }
+
         const bg = tx.budgetContext === "work" ? matchBusinessGroup(tx.businessGroupName) : null;
 
         return {
@@ -458,7 +497,7 @@ Always return a transactions array, even for a single transaction (array with on
           businessGroupId: bg?.id ?? null,
           detectedBusinessGroupName: tx.businessGroupName || null,
         };
-      });
+      }));
 
       // Backward-compatible response: if single transaction, also include flat `parsed` field
       const firstTx = enrichedTransactions[0];
@@ -586,7 +625,17 @@ CATEGORY MATCHING RULES (apply these strictly):
 - Salary, wage -> use "Зарплата"
 - Freelance work payment -> use "Фриланс"
 - Stock, crypto, investment -> use "Инвестиции"
-- Anything else -> use "Другое"
+- Vet, veterinary, pet care, pet food, pet supplies -> NEW category "Питомцы" with emoji 🐾
+- Beauty salon, haircut, spa, manicure, pedicure, cosmetics -> NEW category "Красота" with emoji 💅
+- Sports, gym, fitness, swimming pool, yoga -> NEW category "Спорт" with emoji 🏋️
+- Education, course, tuition, books, school, university -> NEW category "Образование" with emoji 📚
+- Charity, donation -> NEW category "Благотворительность" with emoji 🤝
+- Car repair, car service, car wash, parking, fuel/gas -> NEW category "Авто" with emoji 🚗
+- Furniture, home goods, home repair, renovation -> NEW category "Дом" with emoji 🏠
+- Anything else that does NOT fit any category above -> create a NEW category with a short descriptive name and an appropriate emoji
+
+NEW CATEGORY RULE: If the transaction does NOT match any existing category well, set categoryName to a NEW descriptive name (NOT "Другое") and set newCategoryEmoji to a single appropriate emoji. The system will auto-create this category for the user.
+If the transaction DOES match an existing category, set newCategoryEmoji to empty string "".
 
 Always return a transactions array, even for a single receipt (array with one item).`,
           },
@@ -625,12 +674,13 @@ Always return a transactions array, even for a single receipt (array with one it
                       type: { type: "string", enum: ["income", "expense"] },
                       amount: { type: "number" },
                       currency: { type: "string" },
-                      categoryName: { type: "string" },
+                      categoryName: { type: "string", description: "Best matching category name, OR a new descriptive name if nothing fits" },
+                      newCategoryEmoji: { type: "string", description: "Single emoji for a new category if categoryName is NOT in the available list. Empty string if using an existing category." },
                       description: { type: "string" },
                       date: { type: "number", description: "UTC timestamp in milliseconds" },
                       confidence: { type: "string", enum: ["high", "medium", "low"] },
                     },
-                    required: ["type", "amount", "currency", "categoryName", "description", "date", "confidence"],
+                    required: ["type", "amount", "currency", "categoryName", "newCategoryEmoji", "description", "date", "confidence"],
                     additionalProperties: false,
                   },
                 },
@@ -654,6 +704,7 @@ Always return a transactions array, even for a single receipt (array with one it
           amount: number;
           currency: string;
           categoryName: string;
+          newCategoryEmoji: string;
           description: string;
           date: number;
           confidence: "high" | "medium" | "low";
@@ -679,24 +730,45 @@ Always return a transactions array, even for a single receipt (array with one it
         }
       }
 
-      // Match categories for each transaction
-      const matchCategory = (categoryName: string) => {
+      // Resolve categories: find existing or auto-create new ones
+      const findExistingCategoryReceipt = (categoryName: string) => {
         return (
           userCategories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase()) ||
-          userCategories.find((c) => c.name.toLowerCase().includes(categoryName.toLowerCase())) ||
-          userCategories[userCategories.length - 1]
+          userCategories.find((c) => c.name.toLowerCase().includes(categoryName.toLowerCase()))
         );
       };
 
-      const enrichedTransactions = parsed.transactions.map((tx) => {
-        const cat = matchCategory(tx.categoryName);
+      const autoCreateCategoryReceipt = async (name: string, emoji: string) => {
+        const existing = findExistingCategoryReceipt(name);
+        if (existing) return existing;
+        const result = await createCategory({
+          name,
+          icon: emoji || "📦",
+          color: "#6366f1",
+          type: "both",
+          isPreset: false,
+          userId: ctx.user.id,
+        });
+        if (!result) return userCategories[userCategories.length - 1];
+        return { id: result.id, name, icon: emoji || "📦", color: "#6366f1" };
+      };
+
+      const enrichedTransactions = await Promise.all(parsed.transactions.map(async (tx) => {
+        let cat = findExistingCategoryReceipt(tx.categoryName);
+        if (!cat && tx.newCategoryEmoji) {
+          console.log(`[receipt] Auto-creating category: "${tx.categoryName}" ${tx.newCategoryEmoji}`);
+          cat = await autoCreateCategoryReceipt(tx.categoryName, tx.newCategoryEmoji);
+        }
+        if (!cat) {
+          cat = userCategories.find((c) => c.name === "Другое") || userCategories[userCategories.length - 1];
+        }
         return {
           ...tx,
           categoryId: cat?.id,
           categoryName: cat?.name || tx.categoryName,
           categoryIcon: cat?.icon || "📦",
         };
-      });
+      }));
 
       return {
         imageType: parsed.imageType,
