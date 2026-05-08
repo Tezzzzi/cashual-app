@@ -22,7 +22,6 @@ import VoiceRecorder from "@/components/VoiceRecorder";
 import TransactionForm from "@/components/TransactionForm";
 import ReceiptScanner from "@/components/ReceiptScanner";
 import MultiTransactionReview, { type ReviewTransaction } from "@/components/MultiTransactionReview";
-import QuickVoice from "@/components/QuickVoice";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
 
@@ -404,9 +403,6 @@ export default function Home() {
           />
         </DialogContent>
       </Dialog>
-
-      {/* Quick Voice FAB */}
-      <QuickVoice />
     </div>
   );
 }

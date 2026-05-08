@@ -248,14 +248,6 @@ const translations = {
     ai_recording: "Запись",
     ai_recording_too_short: "Запись слишком короткая",
     ai_no_mic: "Нет доступа к микрофону",
-    qv_too_short: "Запись слишком короткая",
-    qv_no_transactions: "Не удалось распознать транзакции",
-    qv_mic_error: "Нет доступа к микрофону",
-    qv_recording: "Запись...",
-    qv_processing: "Анализирую...",
-    qv_saved_plural: "транзакций сохранено",
-    qv_undo: "Отменить",
-    qv_undone: "Отменено!",
   },
 
   az: {
@@ -502,14 +494,6 @@ const translations = {
     ai_recording: "Yazılır",
     ai_recording_too_short: "Yazı çox qısadır",
     ai_no_mic: "Mikrofona giriş yoxdur",
-    qv_too_short: "Qeyd çox qısadır",
-    qv_no_transactions: "Əməliyyat tanınmadı",
-    qv_mic_error: "Mikrofona giriş yoxdur",
-    qv_recording: "Qeyd olunur...",
-    qv_processing: "Analiz edilir...",
-    qv_saved_plural: "əməliyyat saxlanıldı",
-    qv_undo: "Geri al",
-    qv_undone: "Geri alındı!",
   },
 
   en: {
@@ -756,14 +740,6 @@ const translations = {
     ai_recording: "Recording",
     ai_recording_too_short: "Recording too short",
     ai_no_mic: "No microphone access",
-    qv_too_short: "Recording too short",
-    qv_no_transactions: "Could not parse any transactions",
-    qv_mic_error: "Microphone access denied",
-    qv_recording: "Recording...",
-    qv_processing: "Analyzing...",
-    qv_saved_plural: "transactions saved",
-    qv_undo: "Undo",
-    qv_undone: "Undone!",
   },
 } as const;
 
