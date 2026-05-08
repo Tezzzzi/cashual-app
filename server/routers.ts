@@ -1229,6 +1229,150 @@ const businessRouter = router({
 });
 
 // ─── AI Advisor Router ────────────────────────────────────────────────────────
+
+/**
+ * Build the full financial context for the AI advisor.
+ * Crucially, fetches transactions from ALL viewable family members (not just the current user)
+ * so the AI can compare spending between family members.
+ */
+async function buildAiContext(userId: number, userCurrency: string) {
+  // 1. Fetch family groups and members
+  const familyGroupsList = await getFamilyGroupsByUserId(userId);
+
+  // 2. Collect all viewable user IDs across all family groups
+  const allViewableUserIds = new Set<number>([userId]);
+  const familyGroupsWithMembers: { id: number; name: string; members: { id: number; name: string }[] }[] = [];
+
+  for (const group of familyGroupsList) {
+    const viewableIds = await getViewableUserIds(group.group.id, userId);
+    // Always include the current user + all viewable members
+    const memberIds = Array.from(new Set([userId, ...viewableIds]));
+    memberIds.forEach((id) => allViewableUserIds.add(id));
+
+    // Get member names for context
+    const memberRows = await getFamilyGroupMembers(group.group.id);
+    const memberList = memberRows.map((m) => ({
+      id: m.user.id,
+      name: m.user.name || m.user.telegramFirstName || "User",
+    }));
+    familyGroupsWithMembers.push({
+      id: group.group.id,
+      name: group.group.name,
+      members: memberList,
+    });
+  }
+
+  // 3. Fetch ALL transactions from all viewable family members
+  const userIdsArray = Array.from(allViewableUserIds);
+  const allTransactions = await getTransactions(userId, {
+    limit: 500,
+    userIds: userIdsArray,
+  });
+
+  // 4. Fetch categories and business groups
+  const userCategories = await getCategories(userId);
+  const businessGroupsList = await getBusinessGroups(userId);
+
+  // 5. Build summaries
+  const now = Date.now();
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+  const ninetyDaysAgo = now - 90 * 24 * 60 * 60 * 1000;
+
+  const last30 = allTransactions.filter((t) => t.transaction.date >= thirtyDaysAgo);
+  const last90 = allTransactions.filter((t) => t.transaction.date >= ninetyDaysAgo);
+
+  const income30 = last30.filter((t) => t.transaction.type === "income").reduce((s, t) => s + parseFloat(String(t.transaction.amount)), 0);
+  const expense30 = last30.filter((t) => t.transaction.type === "expense").reduce((s, t) => s + parseFloat(String(t.transaction.amount)), 0);
+  const income90 = last90.filter((t) => t.transaction.type === "income").reduce((s, t) => s + parseFloat(String(t.transaction.amount)), 0);
+  const expense90 = last90.filter((t) => t.transaction.type === "expense").reduce((s, t) => s + parseFloat(String(t.transaction.amount)), 0);
+
+  // 6. Category breakdown for last 30 days
+  const categoryBreakdown30: Record<string, { total: number; count: number }> = {};
+  for (const t of last30.filter((t) => t.transaction.type === "expense")) {
+    const catName = t.categoryName || "Без категории";
+    if (!categoryBreakdown30[catName]) categoryBreakdown30[catName] = { total: 0, count: 0 };
+    categoryBreakdown30[catName].total += parseFloat(String(t.transaction.amount));
+    categoryBreakdown30[catName].count++;
+  }
+
+  // 7. Per-member expense breakdown for last 30 days
+  const memberBreakdown30: Record<string, { income: number; expense: number }> = {};
+  for (const t of last30) {
+    const memberName = t.userName || "Unknown";
+    if (!memberBreakdown30[memberName]) memberBreakdown30[memberName] = { income: 0, expense: 0 };
+    const amt = parseFloat(String(t.transaction.amount));
+    if (t.transaction.type === "income") memberBreakdown30[memberName].income += amt;
+    else memberBreakdown30[memberName].expense += amt;
+  }
+
+  // 8. Build transaction list for context (last 150 for detail, with createdBy)
+  const recentTxList = allTransactions.slice(0, 150).map((t) => ({
+    date: new Date(t.transaction.date).toISOString().split("T")[0],
+    type: t.transaction.type,
+    amount: parseFloat(String(t.transaction.amount)),
+    currency: t.transaction.currency,
+    category: t.categoryName || "N/A",
+    description: t.transaction.description || "",
+    createdBy: t.userName || "Unknown",
+    isWork: t.transaction.isWork,
+    isFamily: t.transaction.isFamily,
+    businessGroupId: t.transaction.businessGroupId,
+  }));
+
+  return JSON.stringify({
+    userCurrency,
+    totalTransactions: allTransactions.length,
+    isFamilyAccount: familyGroupsWithMembers.length > 0,
+    summary30days: { income: income30, expense: expense30, balance: income30 - expense30 },
+    summary90days: { income: income90, expense: expense90, balance: income90 - expense90 },
+    memberBreakdown30days: Object.entries(memberBreakdown30).map(([name, data]) => ({ member: name, ...data })),
+    categoryBreakdown30days: Object.entries(categoryBreakdown30)
+      .sort((a, b) => b[1].total - a[1].total)
+      .map(([name, data]) => ({ category: name, total: data.total, count: data.count })),
+    businessGroups: businessGroupsList.map((g) => ({ id: g.id, name: g.name })),
+    familyGroups: familyGroupsWithMembers,
+    categories: userCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
+    recentTransactions: recentTxList,
+    currentDate: new Date().toISOString().split("T")[0],
+  });
+}
+
+function buildSystemPrompt(contextData: string, userCurrency: string, userLang: string) {
+  const langInstruction =
+    userLang === "ru"
+      ? "Отвечай на русском языке."
+      : userLang === "az"
+        ? "Azərbaycan dilində cavab ver."
+        : "Respond in English.";
+
+  return `You are CA$HUAL AI — a smart financial advisor and reporting assistant inside a personal finance app. You have access to the user's real transaction data, including transactions from ALL family members.
+
+${langInstruction}
+
+IMPORTANT: The context includes transactions from ALL family members. Each transaction has a "createdBy" field with the member's name. Use this to compare spending between family members when asked.
+
+Your capabilities:
+1. **Answer questions about spending/income** — analyze the data and give precise numbers with breakdowns
+2. **Generate reports** — summarize by period, category, budget type (personal/family/work)
+3. **Compare family members** — group transactions by "createdBy" to show each member's spending/income separately
+4. **Provide financial advice** — identify spending patterns, suggest savings, warn about overspending
+5. **Compare periods** — show differences between months/weeks
+6. **Calculate averages** — daily/weekly/monthly averages
+
+Formatting rules:
+- Use Markdown formatting for readability
+- Use **bold** for key numbers and totals
+- Use bullet points or numbered lists for breakdowns
+- Use emoji sparingly for visual appeal (💰 📈 📉 📊 ✅ ⚠️ 💡)
+- Keep responses concise but informative (max 600 words)
+- Always include specific numbers from the user's data
+- When giving advice, be practical and actionable
+- Currency: ${userCurrency}
+
+User's financial data context (includes ALL family members' transactions):
+${contextData}`;
+}
+
 const aiAdvisorRouter = router({
   ask: protectedProcedure
     .input(
@@ -1241,124 +1385,8 @@ const aiAdvisorRouter = router({
       const userCurrency = (ctx.user as any).preferredCurrency || "AZN";
       const userLang = (ctx.user as any).preferredLanguage || "ru";
 
-      // Fetch user's transaction data for context (last 500 transactions)
-      const allTransactions = await getTransactions(userId, { limit: 500 });
-
-      // Fetch categories
-      const userCategories = await getCategories(userId);
-
-      // Fetch business groups
-      const businessGroupsList = await getBusinessGroups(userId);
-
-      // Fetch family groups and members
-      const familyGroupsList = await getFamilyGroupsByUserId(userId);
-      const familyMembers: Record<number, { id: number; name: string }[]> = {};
-      for (const group of familyGroupsList) {
-        const members = await getFamilyGroupMembers(group.group.id);
-        familyMembers[group.group.id] = members.map((m) => ({
-          id: m.user.id,
-          name: m.user.name || m.user.telegramFirstName || "User",
-        }));
-      }
-
-      // Build a summary of transactions for the LLM
-      const now = Date.now();
-      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-      const ninetyDaysAgo = now - 90 * 24 * 60 * 60 * 1000;
-
-      // Compute summaries
-      const last30 = allTransactions.filter((t) => t.transaction.date >= thirtyDaysAgo);
-      const last90 = allTransactions.filter((t) => t.transaction.date >= ninetyDaysAgo);
-
-      const income30 = last30
-        .filter((t) => t.transaction.type === "income")
-        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
-      const expense30 = last30
-        .filter((t) => t.transaction.type === "expense")
-        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
-
-      const income90 = last90
-        .filter((t) => t.transaction.type === "income")
-        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
-      const expense90 = last90
-        .filter((t) => t.transaction.type === "expense")
-        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
-
-      // Category breakdown for last 30 days
-      const categoryBreakdown30: Record<string, { total: number; count: number }> = {};
-      for (const t of last30.filter((t) => t.transaction.type === "expense")) {
-        const catName = t.categoryName || "Без категории";
-        if (!categoryBreakdown30[catName]) categoryBreakdown30[catName] = { total: 0, count: 0 };
-        categoryBreakdown30[catName].total += parseFloat(String(t.transaction.amount));
-        categoryBreakdown30[catName].count++;
-      }
-
-      // Build transaction list for context (last 100 for detail)
-      const recentTxList = allTransactions.slice(0, 100).map((t) => ({
-        date: new Date(t.transaction.date).toISOString().split("T")[0],
-        type: t.transaction.type,
-        amount: parseFloat(String(t.transaction.amount)),
-        currency: t.transaction.currency,
-        category: t.categoryName || "N/A",
-        description: t.transaction.description || "",
-        createdBy: t.userName || "Unknown",
-        isWork: t.transaction.isWork,
-        isFamily: t.transaction.isFamily,
-        businessGroupId: t.transaction.businessGroupId,
-      }));
-
-      // Build context string
-      const contextData = JSON.stringify({
-        userCurrency,
-        totalTransactions: allTransactions.length,
-        summary30days: { income: income30, expense: expense30, balance: income30 - expense30 },
-        summary90days: { income: income90, expense: expense90, balance: income90 - expense90 },
-        categoryBreakdown30days: Object.entries(categoryBreakdown30)
-          .sort((a, b) => b[1].total - a[1].total)
-          .map(([name, data]) => ({ category: name, total: data.total, count: data.count })),
-        businessGroups: businessGroupsList.map((g) => ({ id: g.id, name: g.name })),
-        familyGroups: familyGroupsList.map((g) => ({
-          id: g.group.id,
-          name: g.group.name,
-          members: familyMembers[g.group.id] || [],
-        })),
-        categories: userCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
-        recentTransactions: recentTxList,
-        currentDate: new Date().toISOString().split("T")[0],
-      });
-
-      // Determine response language instruction
-      const langInstruction =
-        userLang === "ru"
-          ? "Отвечай на русском языке."
-          : userLang === "az"
-            ? "Azərbaycan dilində cavab ver."
-            : "Respond in English.";
-
-      const systemPrompt = `You are CA$HUAL AI — a smart financial advisor and reporting assistant inside a personal finance app. You have access to the user's real transaction data.
-
-${langInstruction}
-
-Your capabilities:
-1. **Answer questions about spending/income** — analyze the user's data and give precise numbers with breakdowns
-2. **Generate reports** — summarize by period, category, budget type (personal/family/work)
-3. **Compare family members** — use the "createdBy" field in transactions to compare spending between different family members
-4. **Provide financial advice** — identify spending patterns, suggest savings, warn about overspending
-5. **Compare periods** — show differences between months/weeks
-6. **Calculate averages** — daily/weekly/monthly averages
-
-Formatting rules:
-- Use Markdown formatting for readability
-- Use **bold** for key numbers and totals
-- Use bullet points or numbered lists for breakdowns
-- Use emoji sparingly for visual appeal (💰 📈 📉 📊 ✅ ⚠️ 💡)
-- Keep responses concise but informative (max 500 words)
-- Always include specific numbers from the user's data
-- When giving advice, be practical and actionable
-- Currency: ${userCurrency}
-
-User's financial data context:
-${contextData}`;
+      const contextData = await buildAiContext(userId, userCurrency);
+      const systemPrompt = buildSystemPrompt(contextData, userCurrency, userLang);
 
       const llmResult = await invokeLLM({
         messages: [
@@ -1400,118 +1428,18 @@ ${contextData}`;
         });
       }
 
-      // Step 2: Use the transcribed text as the question
-      const question = transcription.text;
-
-      // Reuse the ask logic by calling it internally
+      // Step 2: Build context and call AI (same logic as ask)
       const userId = ctx.user.id;
       const userCurrency = (ctx.user as any).preferredCurrency || "AZN";
       const userLang = (ctx.user as any).preferredLanguage || "ru";
 
-      const allTransactions = await getTransactions(userId, { limit: 500 });
-      const userCategories = await getCategories(userId);
-      const businessGroupsList = await getBusinessGroups(userId);
-      const familyGroupsList = await getFamilyGroupsByUserId(userId);
-      const familyMembers: Record<number, { id: number; name: string }[]> = {};
-      for (const group of familyGroupsList) {
-        const members = await getFamilyGroupMembers(group.group.id);
-        familyMembers[group.group.id] = members.map((m) => ({
-          id: m.user.id,
-          name: m.user.name || m.user.telegramFirstName || "User",
-        }));
-      }
-
-      const now = Date.now();
-      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-      const ninetyDaysAgo = now - 90 * 24 * 60 * 60 * 1000;
-
-      const last30 = allTransactions.filter((t) => t.transaction.date >= thirtyDaysAgo);
-      const last90 = allTransactions.filter((t) => t.transaction.date >= ninetyDaysAgo);
-
-      const income30 = last30
-        .filter((t) => t.transaction.type === "income")
-        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
-      const expense30 = last30
-        .filter((t) => t.transaction.type === "expense")
-        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
-      const income90 = last90
-        .filter((t) => t.transaction.type === "income")
-        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
-      const expense90 = last90
-        .filter((t) => t.transaction.type === "expense")
-        .reduce((sum, t) => sum + parseFloat(String(t.transaction.amount)), 0);
-
-      const categoryBreakdown30: Record<string, { total: number; count: number }> = {};
-      for (const t of last30.filter((t) => t.transaction.type === "expense")) {
-        const catName = t.categoryName || "Без категории";
-        if (!categoryBreakdown30[catName]) categoryBreakdown30[catName] = { total: 0, count: 0 };
-        categoryBreakdown30[catName].total += parseFloat(String(t.transaction.amount));
-        categoryBreakdown30[catName].count++;
-      }
-
-      const recentTxList = allTransactions.slice(0, 100).map((t) => ({
-        date: new Date(t.transaction.date).toISOString().split("T")[0],
-        type: t.transaction.type,
-        amount: parseFloat(String(t.transaction.amount)),
-        currency: t.transaction.currency,
-        category: t.categoryName || "N/A",
-        description: t.transaction.description || "",
-        isWork: t.transaction.isWork,
-        isFamily: t.transaction.isFamily,
-        businessGroupId: t.transaction.businessGroupId,
-      }));
-
-      const contextData = JSON.stringify({
-        userCurrency,
-        totalTransactions: allTransactions.length,
-        summary30days: { income: income30, expense: expense30, balance: income30 - expense30 },
-        summary90days: { income: income90, expense: expense90, balance: income90 - expense90 },
-        categoryBreakdown30days: Object.entries(categoryBreakdown30)
-          .sort((a, b) => b[1].total - a[1].total)
-          .map(([name, data]) => ({ category: name, total: data.total, count: data.count })),
-        businessGroups: businessGroupsList.map((g) => ({ id: g.id, name: g.name })),
-        familyGroups: familyGroupsList.map((g) => ({ id: g.group.id, name: g.group.name })),
-        categories: userCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
-        recentTransactions: recentTxList,
-        currentDate: new Date().toISOString().split("T")[0],
-      });
-
-      const langInstruction =
-        userLang === "ru"
-          ? "Отвечай на русском языке."
-          : userLang === "az"
-            ? "Azərbaycan dilində cavab ver."
-            : "Respond in English.";
-
-      const systemPrompt = `You are CA$HUAL AI — a smart financial advisor and reporting assistant inside a personal finance app. You have access to the user's real transaction data.
-
-${langInstruction}
-
-Your capabilities:
-1. **Answer questions about spending/income** — analyze the user's data and give precise numbers with breakdowns
-2. **Generate reports** — summarize by period, category, budget type (personal/family/work)
-3. **Compare family members** — use the "createdBy" field in transactions to compare spending between different family members
-4. **Provide financial advice** — identify spending patterns, suggest savings, warn about overspending
-5. **Compare periods** — show differences between months/weeks
-6. **Calculate averages** — daily/weekly/monthly averages
-
-Formatting rules:
-- Use Markdown formatting for readability
-- Use **bold** for key numbers and totals
-- Use bullet points or numbered lists for breakdowns
-- Use emoji sparingly for visual appeal (💰 📈 📉 📊 ✅ ⚠️ 💡)
-- Keep responses concise but informative (max 500 words)
-- Always include specific numbers from the user's data
-- When giving advice, be practical and actionable
-- Currency: ${userCurrency}
-
-User's financial data context:
-${contextData}`;
+      const contextData = await buildAiContext(userId, userCurrency);
+      const systemPrompt = buildSystemPrompt(contextData, userCurrency, userLang);
 
       const llmResult = await invokeLLM({
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: question },
+          { role: "user", content: transcription.text },
         ],
         max_tokens: 2048,
       });
@@ -1521,7 +1449,7 @@ ${contextData}`;
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI failed to generate response" });
       }
 
-      return { response, question, transcription: transcription.text };
+      return { response, question: transcription.text, transcription: transcription.text };
     }),
 });
 
