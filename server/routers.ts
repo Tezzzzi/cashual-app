@@ -1250,8 +1250,16 @@ const aiAdvisorRouter = router({
       // Fetch business groups
       const businessGroupsList = await getBusinessGroups(userId);
 
-      // Fetch family groups
+      // Fetch family groups and members
       const familyGroupsList = await getFamilyGroupsByUserId(userId);
+      const familyMembers: Record<number, { id: number; name: string }[]> = {};
+      for (const group of familyGroupsList) {
+        const members = await getFamilyGroupMembers(group.group.id);
+        familyMembers[group.group.id] = members.map((m) => ({
+          id: m.user.id,
+          name: m.user.name || m.user.telegramFirstName || "User",
+        }));
+      }
 
       // Build a summary of transactions for the LLM
       const now = Date.now();
@@ -1293,6 +1301,7 @@ const aiAdvisorRouter = router({
         currency: t.transaction.currency,
         category: t.categoryName || "N/A",
         description: t.transaction.description || "",
+        createdBy: t.userName || "Unknown",
         isWork: t.transaction.isWork,
         isFamily: t.transaction.isFamily,
         businessGroupId: t.transaction.businessGroupId,
@@ -1308,7 +1317,11 @@ const aiAdvisorRouter = router({
           .sort((a, b) => b[1].total - a[1].total)
           .map(([name, data]) => ({ category: name, total: data.total, count: data.count })),
         businessGroups: businessGroupsList.map((g) => ({ id: g.id, name: g.name })),
-        familyGroups: familyGroupsList.map((g) => ({ id: g.group.id, name: g.group.name })),
+        familyGroups: familyGroupsList.map((g) => ({
+          id: g.group.id,
+          name: g.group.name,
+          members: familyMembers[g.group.id] || [],
+        })),
         categories: userCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
         recentTransactions: recentTxList,
         currentDate: new Date().toISOString().split("T")[0],
@@ -1329,9 +1342,10 @@ ${langInstruction}
 Your capabilities:
 1. **Answer questions about spending/income** — analyze the user's data and give precise numbers with breakdowns
 2. **Generate reports** — summarize by period, category, budget type (personal/family/work)
-3. **Provide financial advice** — identify spending patterns, suggest savings, warn about overspending
-4. **Compare periods** — show differences between months/weeks
-5. **Calculate averages** — daily/weekly/monthly averages
+3. **Compare family members** — use the "createdBy" field in transactions to compare spending between different family members
+4. **Provide financial advice** — identify spending patterns, suggest savings, warn about overspending
+5. **Compare periods** — show differences between months/weeks
+6. **Calculate averages** — daily/weekly/monthly averages
 
 Formatting rules:
 - Use Markdown formatting for readability
@@ -1398,6 +1412,14 @@ ${contextData}`;
       const userCategories = await getCategories(userId);
       const businessGroupsList = await getBusinessGroups(userId);
       const familyGroupsList = await getFamilyGroupsByUserId(userId);
+      const familyMembers: Record<number, { id: number; name: string }[]> = {};
+      for (const group of familyGroupsList) {
+        const members = await getFamilyGroupMembers(group.group.id);
+        familyMembers[group.group.id] = members.map((m) => ({
+          id: m.user.id,
+          name: m.user.name || m.user.telegramFirstName || "User",
+        }));
+      }
 
       const now = Date.now();
       const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
@@ -1468,9 +1490,10 @@ ${langInstruction}
 Your capabilities:
 1. **Answer questions about spending/income** — analyze the user's data and give precise numbers with breakdowns
 2. **Generate reports** — summarize by period, category, budget type (personal/family/work)
-3. **Provide financial advice** — identify spending patterns, suggest savings, warn about overspending
-4. **Compare periods** — show differences between months/weeks
-5. **Calculate averages** — daily/weekly/monthly averages
+3. **Compare family members** — use the "createdBy" field in transactions to compare spending between different family members
+4. **Provide financial advice** — identify spending patterns, suggest savings, warn about overspending
+5. **Compare periods** — show differences between months/weeks
+6. **Calculate averages** — daily/weekly/monthly averages
 
 Formatting rules:
 - Use Markdown formatting for readability
