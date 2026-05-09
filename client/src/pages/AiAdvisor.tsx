@@ -258,7 +258,7 @@ export default function AiAdvisor() {
                   className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
                     msg.role === "user"
                       ? "bg-primary text-primary-foreground rounded-br-md"
-                      : "bg-muted/70 border border-border/50 rounded-bl-md"
+                      : "bg-secondary border border-border rounded-bl-md"
                   }`}
                 >
                   {msg.role === "assistant" ? (
@@ -273,7 +273,7 @@ export default function AiAdvisor() {
             ))}
             {isLoading && (
               <div className="flex justify-start">
-                <div className="bg-muted/70 border border-border/50 rounded-2xl rounded-bl-md px-4 py-3">
+                <div className="bg-secondary border border-border rounded-2xl rounded-bl-md px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
                     <span className="text-sm text-muted-foreground">{t("ai_thinking")}</span>
@@ -327,7 +327,7 @@ export default function AiAdvisor() {
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={t("ai_input_placeholder")}
-                className="flex-1 resize-none bg-muted/50 border border-border/50 rounded-2xl px-4 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 max-h-24 min-h-[40px]"
+                className="flex-1 resize-none bg-secondary border border-border rounded-2xl px-4 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 max-h-24 min-h-[40px]"
                 rows={1}
                 disabled={isLoading}
               />

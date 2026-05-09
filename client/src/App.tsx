@@ -55,7 +55,7 @@ function AuthAwareNav() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="dark">
+      <ThemeProvider defaultTheme="light">
         <LanguageProvider>
           <TooltipProvider>
             <Toaster position="top-center" />

@@ -20,10 +20,10 @@ export default function BottomNav() {
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 safe-bottom"
       style={{
-        background: 'oklch(0.1 0.005 260 / 85%)',
+        background: 'rgba(255, 255, 255, 0.85)',
         backdropFilter: 'blur(24px) saturate(180%)',
         WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-        borderTop: '1px solid oklch(1 0 0 / 5%)',
+        borderTop: '1px solid rgba(60, 60, 67, 0.06)',
       }}
     >
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-1">
@@ -37,7 +37,7 @@ export default function BottomNav() {
               className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-all duration-200 ${
                 isActive
                   ? "text-primary"
-                  : "text-muted-foreground/70 hover:text-foreground/80"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`}>

@@ -33,8 +33,8 @@ if (window.Telegram?.WebApp) {
   try {
     window.Telegram.WebApp.ready();
     window.Telegram.WebApp.expand();
-    window.Telegram.WebApp.setHeaderColor("#0f0f0f");
-    window.Telegram.WebApp.setBackgroundColor("#0f0f0f");
+    window.Telegram.WebApp.setHeaderColor("#F2F2F7");
+    window.Telegram.WebApp.setBackgroundColor("#F2F2F7");
   } catch (e) {
     console.warn("[Telegram] WebApp init error:", e);
   }

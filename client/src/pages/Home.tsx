@@ -114,6 +114,12 @@ export default function Home() {
     saveMultiMutation.mutate({ transactions });
   };
 
+  // Check if a transaction is "new" (created within the last 1 hour)
+  const isNewTransaction = (date: number) => {
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    return date > oneHourAgo;
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -161,57 +167,57 @@ export default function Home() {
   }
 
   return (
-    <div className="px-5 pt-6 pb-28 space-y-6 max-w-lg mx-auto">
-      {/* Header */}
+    <div className="px-5 pt-6 pb-28 space-y-7 max-w-lg mx-auto">
+      {/* Header — minimal */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider">{t("greeting")}</p>
-          <h1 className="text-2xl font-bold tracking-tight mt-0.5">
+          <p className="text-xs text-muted-foreground font-medium">{t("greeting")}</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             {user?.telegramFirstName || user?.name || t("user_fallback")}
           </h1>
         </div>
         <Button
           size="icon"
           variant="ghost"
-          className="rounded-full h-11 w-11 bg-card border border-border hover:bg-secondary"
+          className="rounded-2xl h-11 w-11 bg-card shadow-sm border-0 hover:bg-card/80"
           onClick={() => {
             setVoiceResult(null);
             setShowAddDialog(true);
           }}
         >
-          <Plus className="h-5 w-5" />
+          <Plus className="h-5 w-5 text-primary" />
         </Button>
       </div>
 
-      {/* Balance Card — Apple Wallet Style */}
+      {/* Balance Card — Large, vibrant gradient, main element */}
       <div className="wallet-card wallet-card-primary">
         <div className="relative z-10">
-          <p className="text-xs text-white/60 uppercase tracking-wider font-medium">
+          <p className="text-sm text-white/70 font-medium">
             {familyGroupId ? (t("family_balance") || "Family Balance") : t("total_balance")}
           </p>
-          <p className="text-4xl font-bold text-white mt-2 tracking-tight">
+          <p className="text-5xl font-bold text-white mt-3 tracking-tight">
             {summaryLoading ? (
-              <span className="inline-block w-40 h-10 shimmer rounded-lg" />
+              <span className="inline-block w-48 h-12 bg-white/20 rounded-xl animate-pulse" />
             ) : (
               <>
                 {(summary?.balance ?? 0).toLocaleString("ru-RU", {
                   minimumFractionDigits: 2,
                 })}
-                <span className="text-lg font-normal text-white/50 ml-2">
-                  {user?.preferredCurrency || "AZN"}
-                </span>
               </>
             )}
           </p>
+          <p className="text-lg text-white/50 font-medium mt-1">
+            {user?.preferredCurrency || "AZN"}
+          </p>
 
-          <div className="flex gap-6 mt-6">
+          <div className="flex gap-8 mt-8">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-income/20 flex items-center justify-center">
-                <ArrowUpCircle className="h-4 w-4 text-income" />
+              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center">
+                <ArrowUpCircle className="h-5 w-5 text-white" />
               </div>
               <div>
-                <p className="text-[10px] text-white/50 uppercase tracking-wider">{t("income")}</p>
-                <p className="text-sm font-semibold text-income">
+                <p className="text-[11px] text-white/60 font-medium">{t("income")}</p>
+                <p className="text-base font-bold text-white">
                   {summaryLoading
                     ? "..."
                     : (summary?.totalIncome ?? 0).toLocaleString("ru-RU", {
@@ -221,12 +227,12 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-expense/20 flex items-center justify-center">
-                <ArrowDownCircle className="h-4 w-4 text-expense" />
+              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center">
+                <ArrowDownCircle className="h-5 w-5 text-white" />
               </div>
               <div>
-                <p className="text-[10px] text-white/50 uppercase tracking-wider">{t("expenses")}</p>
-                <p className="text-sm font-semibold text-expense">
+                <p className="text-[11px] text-white/60 font-medium">{t("expenses")}</p>
+                <p className="text-base font-bold text-white">
                   {summaryLoading
                     ? "..."
                     : (summary?.totalExpense ?? 0).toLocaleString("ru-RU", {
@@ -239,17 +245,17 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Voice Recorder */}
+      {/* Voice Recorder — clean card */}
       <div className="tg-card text-center">
-        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-4">{t("voice_input")}</p>
+        <p className="text-xs text-muted-foreground font-medium mb-4">{t("voice_input")}</p>
         <VoiceRecorder onResult={handleVoiceResult} />
-        <p className="text-[10px] text-muted-foreground mt-3 tracking-wide">RU / AZ / EN</p>
+        <p className="text-[10px] text-muted-foreground mt-3">RU / AZ / EN</p>
       </div>
 
       {/* Receipt Scanner */}
       <Button
         variant="ghost"
-        className="w-full h-14 gap-3 rounded-2xl border border-border bg-card hover:bg-secondary text-foreground"
+        className="w-full h-14 gap-3 rounded-2xl bg-card shadow-sm hover:bg-card/80 text-foreground border-0"
         onClick={() => setShowReceiptScanner(true)}
       >
         <ScanLine className="h-5 w-5 text-primary" />
@@ -259,7 +265,7 @@ export default function Home() {
       {/* Recent Transactions */}
       <div className="tg-section">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{t("recent_records")}</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("recent_records")}</h2>
           <a href="/transactions" className="text-xs text-primary font-medium">
             {t("all_records")}
           </a>
@@ -271,52 +277,60 @@ export default function Home() {
             ))}
           </div>
         ) : recentTxns && recentTxns.length > 0 ? (
-          <div className="space-y-2">
-            {recentTxns.map((t_item) => (
-              <div
-                key={t_item.transaction.id}
-                className="tg-card flex items-center gap-4 py-4 interactive"
-              >
-                <div className="w-11 h-11 rounded-2xl bg-secondary flex items-center justify-center text-lg shrink-0">
-                  {t_item.categoryIcon || "📦"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {t_item.transaction.description || translateCategory(t_item.categoryName || "") || t("transaction_label")}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {translateCategory(t_item.categoryName || "")} · {new Date(t_item.transaction.date).toLocaleDateString("ru-RU")}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p
-                    className={`text-sm font-bold ${
-                      t_item.transaction.type === "income"
-                        ? "text-income"
-                        : "text-expense"
-                    }`}
-                  >
-                    {t_item.transaction.type === "income" ? "+" : "-"}
-                    {parseFloat(t_item.transaction.amount).toLocaleString("ru-RU", {
-                      minimumFractionDigits: 2,
-                    })}
-                  </p>
-                  {t_item.transaction.originalCurrency &&
-                    t_item.transaction.originalCurrency !== (user?.preferredCurrency || "AZN") && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {t_item.transaction.type === "income" ? "+" : "-"}
-                      {parseFloat(t_item.transaction.originalAmount || "0").toLocaleString("ru-RU", {
-                        minimumFractionDigits: 2,
-                      })}{" "}
-                      {t_item.transaction.originalCurrency}
+          <div className="tg-card p-3 space-y-1">
+            {recentTxns.map((t_item) => {
+              const isNew = isNewTransaction(t_item.transaction.date);
+              return (
+                <div
+                  key={t_item.transaction.id}
+                  className={`flex items-center gap-4 p-3 rounded-xl transition-all ${
+                    isNew ? "new-transaction bg-primary/[0.03]" : ""
+                  }`}
+                >
+                  <div className="w-11 h-11 rounded-2xl bg-secondary flex items-center justify-center text-lg shrink-0">
+                    {t_item.categoryIcon || "📦"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate text-foreground">
+                        {t_item.transaction.description || translateCategory(t_item.categoryName || "") || t("transaction_label")}
+                      </p>
+                      {isNew && <span className="new-badge">NEW</span>}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {translateCategory(t_item.categoryName || "")} · {new Date(t_item.transaction.date).toLocaleDateString("ru-RU")}
                     </p>
-                  )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p
+                      className={`text-sm font-bold ${
+                        t_item.transaction.type === "income"
+                          ? "text-income"
+                          : "text-expense"
+                      }`}
+                    >
+                      {t_item.transaction.type === "income" ? "+" : "-"}
+                      {parseFloat(t_item.transaction.amount).toLocaleString("ru-RU", {
+                        minimumFractionDigits: 2,
+                      })}
+                    </p>
+                    {t_item.transaction.originalCurrency &&
+                      t_item.transaction.originalCurrency !== (user?.preferredCurrency || "AZN") && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {t_item.transaction.type === "income" ? "+" : "-"}
+                        {parseFloat(t_item.transaction.originalAmount || "0").toLocaleString("ru-RU", {
+                          minimumFractionDigits: 2,
+                        })}{" "}
+                        {t_item.transaction.originalCurrency}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
-          <div className="tg-card text-center py-10">
+          <div className="tg-card text-center py-12">
             <p className="text-sm text-muted-foreground">
               {t("no_records")}
             </p>
@@ -324,7 +338,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* Receipt Scanner */}
+      {/* Receipt Scanner Dialog */}
       <ReceiptScanner
         open={showReceiptScanner}
         onOpenChange={setShowReceiptScanner}
@@ -363,7 +377,7 @@ export default function Home() {
             </DialogTitle>
           </DialogHeader>
           {voiceResult && (
-            <div className="bg-secondary/50 rounded-xl p-4 mb-2">
+            <div className="bg-secondary rounded-xl p-4 mb-2">
               <p className="text-xs text-muted-foreground mb-1">{t("recognized")}</p>
               <p className="text-sm italic text-foreground/80">"{voiceResult.transcription}"</p>
             </div>

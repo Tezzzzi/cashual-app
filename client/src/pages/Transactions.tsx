@@ -127,6 +127,47 @@ export default function Transactions() {
     { key: "all", label: t("scope_all") },
   ];
 
+  // Check if a transaction is "new" (created within the last 1 hour)
+  const isNewTransaction = (date: number) => {
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    return date > oneHourAgo;
+  };
+
+  // Group transactions by date for date separators
+  const groupedTransactions = useMemo(() => {
+    if (!txns) return [];
+    const groups: { date: string; label: string; items: typeof txns }[] = [];
+    let currentDate = "";
+
+    for (const t_item of txns) {
+      const dateStr = new Date(t_item.transaction.date).toLocaleDateString("ru-RU");
+      if (dateStr !== currentDate) {
+        currentDate = dateStr;
+        // Format a friendly label
+        const txDate = new Date(t_item.transaction.date);
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        let label: string;
+        if (txDate.toDateString() === today.toDateString()) {
+          label = t("today") || "Сегодня";
+        } else if (txDate.toDateString() === yesterday.toDateString()) {
+          label = t("yesterday") || "Вчера";
+        } else {
+          label = txDate.toLocaleDateString("ru-RU", {
+            day: "numeric",
+            month: "long",
+            year: txDate.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+          });
+        }
+        groups.push({ date: dateStr, label, items: [] });
+      }
+      groups[groups.length - 1].items.push(t_item);
+    }
+    return groups;
+  }, [txns, t]);
+
   // Helper: format amount with dual currency display
   const formatAmount = (txn: any) => {
     const mainAmount = parseFloat(txn.amount).toLocaleString("ru-RU", {
@@ -164,7 +205,7 @@ export default function Transactions() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">{t("transactions_title")}</h1>
         <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-32 h-9">
+          <SelectTrigger className="w-32 h-9 bg-card shadow-sm border-0">
             <Filter className="h-3.5 w-3.5 mr-1" />
             <SelectValue />
           </SelectTrigger>
@@ -178,12 +219,12 @@ export default function Transactions() {
 
       {/* Budget filter tabs */}
       {(hasFamily || hasBusiness) && (
-        <div className="tg-card space-y-2">
+        <div className="tg-card space-y-3">
           <div className="flex gap-1.5 flex-wrap">
             <Button
               variant={budgetFilter === "all" ? "default" : "outline"}
               size="sm"
-              className="text-xs"
+              className="text-xs rounded-xl"
               onClick={() => setBudgetFilter("all")}
             >
               {t("all")}
@@ -191,7 +232,7 @@ export default function Transactions() {
             <Button
               variant={budgetFilter === "personal" ? "default" : "outline"}
               size="sm"
-              className="text-xs"
+              className="text-xs rounded-xl"
               onClick={() => setBudgetFilter("personal")}
             >
               {t("personal")}
@@ -200,7 +241,7 @@ export default function Transactions() {
               <Button
                 variant={budgetFilter === "family" ? "default" : "outline"}
                 size="sm"
-                className="text-xs"
+                className="text-xs rounded-xl"
                 onClick={() => setBudgetFilter("family")}
               >
                 <Users className="h-3 w-3 mr-1" />
@@ -211,7 +252,7 @@ export default function Transactions() {
               <Button
                 variant={budgetFilter === "work" ? "default" : "outline"}
                 size="sm"
-                className={`text-xs ${budgetFilter === "work" ? "bg-blue-600 text-white hover:bg-blue-700" : ""}`}
+                className={`text-xs rounded-xl ${budgetFilter === "work" ? "bg-blue-600 text-white hover:bg-blue-700" : ""}`}
                 onClick={() => setBudgetFilter("work")}
               >
                 <Briefcase className="h-3 w-3 mr-1" />
@@ -247,7 +288,7 @@ export default function Transactions() {
                     key={s.key}
                     variant={scope === s.key ? "default" : "outline"}
                     size="sm"
-                    className={`flex-1 text-xs ${scope === s.key ? "bg-primary text-primary-foreground" : ""}`}
+                    className={`flex-1 text-xs rounded-xl ${scope === s.key ? "bg-primary text-primary-foreground" : ""}`}
                     onClick={() => setScope(s.key)}
                   >
                     {s.label}
@@ -259,82 +300,98 @@ export default function Transactions() {
         </div>
       )}
 
-      {/* Transaction List */}
+      {/* Transaction List with Date Separators */}
       {isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
-      ) : txns && txns.length > 0 ? (
+      ) : groupedTransactions.length > 0 ? (
         <div className="space-y-2">
-          {txns.map((t_item) => (
-            <div
-              key={t_item.transaction.id}
-              className="tg-card flex items-center gap-3"
-            >
-              <div className="w-11 h-11 rounded-2xl bg-secondary flex items-center justify-center text-lg shrink-0">
-                {t_item.categoryIcon || "📦"}
+          {groupedTransactions.map((group) => (
+            <div key={group.date}>
+              {/* Date Separator */}
+              <div className="date-separator">
+                <span>{group.label}</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-medium truncate">
-                    {t_item.transaction.description || translateCategory(t_item.categoryName || "Другое") || t("transactions_title")}
-                  </p>
-                  {t_item.transaction.isFamily && (
-                    <span className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full shrink-0">
-                      {t("family_badge")}
-                    </span>
-                  )}
-                  {t_item.transaction.isWork && (
-                    <span className="text-[9px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full shrink-0">
-                      💼 {t("work_badge")}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  {translateCategory(t_item.categoryName || "")}
-                  {t_item.userName && scope !== "mine" && (
-                    <span className="text-primary/80"> · {t_item.userName}</span>
-                  )}
-                  {" · "}
-                  {new Date(t_item.transaction.date).toLocaleDateString("ru-RU")}
-                </p>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <div className="mr-1">
-                  {formatAmount(t_item.transaction)}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() =>
-                    setEditingTxn({
-                      id: t_item.transaction.id,
-                      type: t_item.transaction.type,
-                      amount: t_item.transaction.amount,
-                      currency: t_item.transaction.currency,
-                      categoryId: t_item.transaction.categoryId,
-                      description: t_item.transaction.description,
-                      date: t_item.transaction.date,
-                      isFamily: t_item.transaction.isFamily,
-                      familyGroupId: t_item.transaction.familyGroupId,
-                      isWork: t_item.transaction.isWork,
-                      businessGroupId: t_item.transaction.businessGroupId,
-                      originalAmount: t_item.transaction.originalAmount,
-                      originalCurrency: t_item.transaction.originalCurrency,
-                    })
-                  }
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive"
-                  onClick={() => setDeletingId(t_item.transaction.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+
+              {/* Transactions for this date in a single card */}
+              <div className="tg-card p-3 space-y-0.5">
+                {group.items.map((t_item) => {
+                  const isNew = isNewTransaction(t_item.transaction.date);
+                  return (
+                    <div
+                      key={t_item.transaction.id}
+                      className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
+                        isNew ? "new-transaction bg-primary/[0.04]" : ""
+                      }`}
+                    >
+                      <div className="w-11 h-11 rounded-2xl bg-secondary flex items-center justify-center text-lg shrink-0">
+                        {t_item.categoryIcon || "📦"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate text-foreground">
+                            {t_item.transaction.description || translateCategory(t_item.categoryName || "Другое") || t("transactions_title")}
+                          </p>
+                          {isNew && <span className="new-badge">NEW</span>}
+                          {t_item.transaction.isFamily && (
+                            <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full shrink-0 font-medium">
+                              {t("family_badge")}
+                            </span>
+                          )}
+                          {t_item.transaction.isWork && (
+                            <span className="text-[9px] bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded-full shrink-0 font-medium">
+                              {t("work_badge")}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {translateCategory(t_item.categoryName || "")}
+                          {t_item.userName && scope !== "mine" && (
+                            <span className="text-primary/80"> · {t_item.userName}</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="mr-1">
+                          {formatAmount(t_item.transaction)}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-xl hover:bg-secondary"
+                          onClick={() =>
+                            setEditingTxn({
+                              id: t_item.transaction.id,
+                              type: t_item.transaction.type,
+                              amount: t_item.transaction.amount,
+                              currency: t_item.transaction.currency,
+                              categoryId: t_item.transaction.categoryId,
+                              description: t_item.transaction.description,
+                              date: t_item.transaction.date,
+                              isFamily: t_item.transaction.isFamily,
+                              familyGroupId: t_item.transaction.familyGroupId,
+                              isWork: t_item.transaction.isWork,
+                              businessGroupId: t_item.transaction.businessGroupId,
+                              originalAmount: t_item.transaction.originalAmount,
+                              originalCurrency: t_item.transaction.originalCurrency,
+                            })
+                          }
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-xl hover:bg-destructive/10"
+                          onClick={() => setDeletingId(t_item.transaction.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}

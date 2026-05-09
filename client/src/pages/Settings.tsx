@@ -244,7 +244,7 @@ export default function Settings() {
 
       {/* User Info */}
       <div className="tg-card flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-lg font-bold">
+        <div className="w-12 h-12 rounded-2xl bg-primary/8 flex items-center justify-center text-lg font-bold">
           {(user?.telegramFirstName || user?.name || "U")[0]}
         </div>
         <div className="flex-1">

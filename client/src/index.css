@@ -40,82 +40,82 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --color-success: oklch(0.75 0.18 145);
-  --color-income: oklch(0.75 0.18 145);
-  --color-expense: oklch(0.7 0.2 25);
+  --color-success: #34C759;
+  --color-income: #34C759;
+  --color-expense: #FF3B30;
 }
 
-/* ─── Apple Wallet Dark Theme (always dark) ─────────────────────────── */
+/* ─── Light Apple Wallet Theme ───────────────────────────────────────── */
 :root {
-  --primary: oklch(0.7 0.18 265);
-  --primary-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(0.7 0.18 265);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --chart-1: oklch(0.75 0.18 145);
-  --chart-2: oklch(0.7 0.2 25);
-  --chart-3: oklch(0.7 0.18 265);
-  --chart-4: oklch(0.75 0.15 55);
-  --chart-5: oklch(0.65 0.2 300);
-  --radius: 1rem;
-  --background: oklch(0.08 0.005 260);
-  --foreground: oklch(0.97 0 0);
-  --card: oklch(0.14 0.008 260);
-  --card-foreground: oklch(0.97 0 0);
-  --popover: oklch(0.14 0.008 260);
-  --popover-foreground: oklch(0.97 0 0);
-  --secondary: oklch(0.18 0.008 260);
-  --secondary-foreground: oklch(0.85 0 0);
-  --muted: oklch(0.2 0.008 260);
-  --muted-foreground: oklch(0.6 0 0);
-  --accent: oklch(0.18 0.008 260);
-  --accent-foreground: oklch(0.97 0 0);
-  --destructive: oklch(0.65 0.25 25);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(1 0 0 / 6%);
-  --input: oklch(1 0 0 / 8%);
-  --ring: oklch(0.7 0.18 265);
-  --sidebar: oklch(0.12 0.008 260);
-  --sidebar-foreground: oklch(0.97 0 0);
-  --sidebar-accent: oklch(0.18 0.008 260);
-  --sidebar-accent-foreground: oklch(0.97 0 0);
-  --sidebar-border: oklch(1 0 0 / 6%);
-  --sidebar-ring: oklch(0.7 0.18 265);
+  --primary: #007AFF;
+  --primary-foreground: #FFFFFF;
+  --sidebar-primary: #007AFF;
+  --sidebar-primary-foreground: #FFFFFF;
+  --chart-1: #34C759;
+  --chart-2: #FF3B30;
+  --chart-3: #007AFF;
+  --chart-4: #FF9500;
+  --chart-5: #AF52DE;
+  --radius: 0.875rem;
+  --background: #F2F2F7;
+  --foreground: #1C1C1E;
+  --card: #FFFFFF;
+  --card-foreground: #1C1C1E;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1C1E;
+  --secondary: #F2F2F7;
+  --secondary-foreground: #3C3C43;
+  --muted: #E5E5EA;
+  --muted-foreground: #8E8E93;
+  --accent: #F2F2F7;
+  --accent-foreground: #1C1C1E;
+  --destructive: #FF3B30;
+  --destructive-foreground: #FFFFFF;
+  --border: rgba(60, 60, 67, 0.08);
+  --input: rgba(60, 60, 67, 0.06);
+  --ring: #007AFF;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #1C1C1E;
+  --sidebar-accent: #F2F2F7;
+  --sidebar-accent-foreground: #1C1C1E;
+  --sidebar-border: rgba(60, 60, 67, 0.08);
+  --sidebar-ring: #007AFF;
 }
 
-/* Dark variant uses same values (app is always dark) */
+/* Dark variant (kept for compatibility but app is now light-first) */
 .dark {
-  --primary: oklch(0.7 0.18 265);
-  --primary-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(0.7 0.18 265);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --background: oklch(0.08 0.005 260);
-  --foreground: oklch(0.97 0 0);
-  --card: oklch(0.14 0.008 260);
-  --card-foreground: oklch(0.97 0 0);
-  --popover: oklch(0.14 0.008 260);
-  --popover-foreground: oklch(0.97 0 0);
-  --secondary: oklch(0.18 0.008 260);
-  --secondary-foreground: oklch(0.85 0 0);
-  --muted: oklch(0.2 0.008 260);
-  --muted-foreground: oklch(0.6 0 0);
-  --accent: oklch(0.18 0.008 260);
-  --accent-foreground: oklch(0.97 0 0);
-  --destructive: oklch(0.65 0.25 25);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(1 0 0 / 6%);
-  --input: oklch(1 0 0 / 8%);
-  --ring: oklch(0.7 0.18 265);
-  --chart-1: oklch(0.75 0.18 145);
-  --chart-2: oklch(0.7 0.2 25);
-  --chart-3: oklch(0.7 0.18 265);
-  --chart-4: oklch(0.75 0.15 55);
-  --chart-5: oklch(0.65 0.2 300);
-  --sidebar: oklch(0.12 0.008 260);
-  --sidebar-foreground: oklch(0.97 0 0);
-  --sidebar-accent: oklch(0.18 0.008 260);
-  --sidebar-accent-foreground: oklch(0.97 0 0);
-  --sidebar-border: oklch(1 0 0 / 6%);
-  --sidebar-ring: oklch(0.7 0.18 265);
+  --primary: #0A84FF;
+  --primary-foreground: #FFFFFF;
+  --sidebar-primary: #0A84FF;
+  --sidebar-primary-foreground: #FFFFFF;
+  --background: #F2F2F7;
+  --foreground: #1C1C1E;
+  --card: #FFFFFF;
+  --card-foreground: #1C1C1E;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1C1E;
+  --secondary: #F2F2F7;
+  --secondary-foreground: #3C3C43;
+  --muted: #E5E5EA;
+  --muted-foreground: #8E8E93;
+  --accent: #F2F2F7;
+  --accent-foreground: #1C1C1E;
+  --destructive: #FF3B30;
+  --destructive-foreground: #FFFFFF;
+  --border: rgba(60, 60, 67, 0.08);
+  --input: rgba(60, 60, 67, 0.06);
+  --ring: #0A84FF;
+  --chart-1: #34C759;
+  --chart-2: #FF3B30;
+  --chart-3: #0A84FF;
+  --chart-4: #FF9500;
+  --chart-5: #AF52DE;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #1C1C1E;
+  --sidebar-accent: #F2F2F7;
+  --sidebar-accent-foreground: #1C1C1E;
+  --sidebar-border: rgba(60, 60, 67, 0.08);
+  --sidebar-ring: #0A84FF;
 }
 
 @layer base {
@@ -124,7 +124,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overscroll-behavior: none;
@@ -177,62 +177,103 @@
     }
   }
 
-  /* ─── Apple Wallet Card Styles ─────────────────────────────────────── */
+  /* ─── iOS-style Card ───────────────────────────────────────────────── */
   .tg-card {
     @apply bg-card text-card-foreground rounded-2xl p-5;
-    border: 1px solid oklch(1 0 0 / 4%);
     box-shadow:
-      0 2px 8px oklch(0 0 0 / 20%),
-      0 0 0 1px oklch(1 0 0 / 3%),
-      inset 0 1px 0 oklch(1 0 0 / 4%);
+      0 1px 3px rgba(0, 0, 0, 0.04),
+      0 4px 12px rgba(0, 0, 0, 0.03);
   }
 
   .tg-section {
     @apply mb-6;
   }
 
-  /* Wallet-style gradient card (balance, main cards) */
+  /* ─── Wallet Gradient Cards ────────────────────────────────────────── */
   .wallet-card {
-    @apply rounded-3xl p-6 relative overflow-hidden;
+    @apply rounded-3xl p-7 relative overflow-hidden;
     box-shadow:
-      0 8px 32px oklch(0 0 0 / 40%),
-      0 2px 8px oklch(0 0 0 / 20%),
-      inset 0 1px 0 oklch(1 0 0 / 8%);
+      0 10px 40px rgba(0, 0, 0, 0.12),
+      0 2px 8px rgba(0, 0, 0, 0.06);
   }
 
   .wallet-card::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse at top right, oklch(1 0 0 / 6%), transparent 60%);
+    background: radial-gradient(ellipse at top right, rgba(255,255,255,0.25), transparent 60%);
     pointer-events: none;
   }
 
-  /* Income gradient card */
-  .wallet-card-income {
-    background: linear-gradient(135deg, oklch(0.3 0.1 145), oklch(0.2 0.06 160));
-  }
-
-  /* Expense gradient card */
-  .wallet-card-expense {
-    background: linear-gradient(135deg, oklch(0.3 0.1 25), oklch(0.2 0.06 10));
-  }
-
-  /* Primary gradient card */
+  /* Primary gradient (balance card) */
   .wallet-card-primary {
-    background: linear-gradient(135deg, oklch(0.28 0.12 265), oklch(0.18 0.08 280));
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
   }
 
-  /* Subtle glass card */
+  /* Income gradient */
+  .wallet-card-income {
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    color: #1C1C1E;
+  }
+
+  /* Expense gradient */
+  .wallet-card-expense {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+  }
+
+  /* Blue gradient */
+  .wallet-card-blue {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+  }
+
+  /* ─── Date Separator ───────────────────────────────────────────────── */
+  .date-separator {
+    @apply flex items-center gap-3 py-3 px-1;
+  }
+
+  .date-separator::before,
+  .date-separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(60, 60, 67, 0.08);
+  }
+
+  .date-separator span {
+    @apply text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap;
+  }
+
+  /* ─── NEW Badge ────────────────────────────────────────────────────── */
+  @keyframes new-glow {
+    0%, 100% { box-shadow: 0 0 4px rgba(0, 122, 255, 0.3); }
+    50% { box-shadow: 0 0 12px rgba(0, 122, 255, 0.5); }
+  }
+
+  .new-badge {
+    @apply text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md;
+    background: linear-gradient(135deg, #007AFF, #5856D6);
+    color: white;
+    animation: new-glow 2s ease-in-out infinite;
+  }
+
+  .new-transaction {
+    position: relative;
+    border-left: 3px solid #007AFF;
+  }
+
+  /* ─── Glass Card (for nav) ─────────────────────────────────────────── */
   .glass-card {
     @apply rounded-2xl p-4;
-    background: oklch(1 0 0 / 4%);
-    border: 1px solid oklch(1 0 0 / 6%);
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(60, 60, 67, 0.06);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
   }
 
-  /* Voice recording pulse animation */
+  /* ─── Animations ───────────────────────────────────────────────────── */
   @keyframes voice-pulse {
     0%, 100% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.15); opacity: 0.8; }
@@ -242,16 +283,16 @@
     animation: voice-pulse 1.5s ease-in-out infinite;
   }
 
-  /* Shimmer effect for loading states */
   @keyframes shimmer {
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
   }
 
   .shimmer {
-    background: linear-gradient(90deg, oklch(0.2 0 0) 25%, oklch(0.25 0 0) 50%, oklch(0.2 0 0) 75%);
+    background: linear-gradient(90deg, #E5E5EA 25%, #F2F2F7 50%, #E5E5EA 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
+    border-radius: 0.75rem;
   }
 
   /* Bottom nav safe area */
@@ -259,12 +300,13 @@
     padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
   }
 
-  /* Smooth transitions for interactive elements */
+  /* Interactive feedback */
   .interactive {
     @apply transition-all duration-200;
   }
 
   .interactive:active {
     transform: scale(0.97);
+    opacity: 0.9;
   }
 }

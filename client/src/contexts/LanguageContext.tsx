@@ -248,6 +248,8 @@ const translations = {
     ai_recording: "Запись",
     ai_recording_too_short: "Запись слишком короткая",
     ai_no_mic: "Нет доступа к микрофону",
+    today: "Сегодня",
+    yesterday: "Вчера",
   },
 
   az: {
@@ -494,6 +496,8 @@ const translations = {
     ai_recording: "Yazılır",
     ai_recording_too_short: "Yazı çox qısadır",
     ai_no_mic: "Mikrofona giriş yoxdur",
+    today: "Bu gün",
+    yesterday: "Dünən",
   },
 
   en: {
@@ -740,6 +744,8 @@ const translations = {
     ai_recording: "Recording",
     ai_recording_too_short: "Recording too short",
     ai_no_mic: "No microphone access",
+    today: "Today",
+    yesterday: "Yesterday",
   },
 } as const;
 
