@@ -42,9 +42,6 @@ export default function BottomNav() {
             >
               <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`}>
                 <Icon className="h-5 w-5" strokeWidth={isActive ? 2.5 : 1.8} />
-                {isActive && (
-                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
-                )}
               </div>
               <span className={`text-[9px] font-medium leading-none tracking-wide ${isActive ? 'opacity-100' : 'opacity-60'}`}>
                 {item.label}
