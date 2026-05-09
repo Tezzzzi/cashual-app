@@ -11,7 +11,6 @@ import {
 import {
   ArrowDownCircle,
   ArrowUpCircle,
-  Wallet,
   Plus,
   Loader2,
   AlertCircle,
@@ -123,8 +122,9 @@ export default function Home() {
   // Loading state
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      <div className="flex flex-col items-center justify-center min-h-screen gap-5">
+        <img src="/logo.png" alt="Cashual" className="w-20 h-20 rounded-3xl shadow-md" />
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">{t("initializing")}</p>
       </div>
     );
@@ -134,9 +134,7 @@ export default function Home() {
   if (authState === "error" && !isAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-8">
-        <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center">
-          <Wallet className="h-10 w-10 text-primary" />
-        </div>
+        <img src="/logo.png" alt="Cashual" className="w-24 h-24 rounded-3xl shadow-lg" />
         <div className="text-center space-y-3">
           <h1 className="text-3xl font-bold tracking-tight">CA$HUAL</h1>
           <p className="text-muted-foreground text-sm">

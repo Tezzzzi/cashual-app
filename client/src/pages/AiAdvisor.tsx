@@ -203,9 +203,7 @@ export default function AiAdvisor() {
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-            <Sparkles className="h-4 w-4 text-primary" />
-          </div>
+          <img src="/logo.png" alt="Cashual" className="w-8 h-8 rounded-xl" />
           <div>
             <h1 className="text-sm font-semibold">{t("ai_title")}</h1>
             <p className="text-[10px] text-muted-foreground">{t("ai_subtitle")}</p>
@@ -222,9 +220,7 @@ export default function AiAdvisor() {
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-6">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-              <Sparkles className="h-8 w-8 text-primary" />
-            </div>
+            <img src="/logo.png" alt="Cashual" className="w-16 h-16 rounded-2xl shadow-md" />
             <div className="text-center space-y-2">
               <h2 className="text-lg font-semibold">{t("ai_welcome_title")}</h2>
               <p className="text-sm text-muted-foreground max-w-[280px]">
