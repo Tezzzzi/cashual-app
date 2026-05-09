@@ -238,13 +238,13 @@ export default function Settings() {
   };
 
   return (
-    <div className="px-4 pt-4 pb-8 space-y-4 max-w-lg mx-auto">
+    <div className="px-5 pt-6 pb-28 space-y-6 max-w-lg mx-auto">
       {/* Header */}
-      <h1 className="text-xl font-bold">{t("settings_title")}</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t("settings_title")}</h1>
 
       {/* User Info */}
       <div className="tg-card flex items-center gap-3">
-        <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-lg font-bold">
+        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-lg font-bold">
           {(user?.telegramFirstName || user?.name || "U")[0]}
         </div>
         <div className="flex-1">

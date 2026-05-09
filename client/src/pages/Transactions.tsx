@@ -159,10 +159,10 @@ export default function Transactions() {
   };
 
   return (
-    <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto pb-24">
+    <div className="px-5 pt-6 space-y-6 max-w-lg mx-auto pb-28">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">{t("transactions_title")}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t("transactions_title")}</h1>
         <Select value={filterType} onValueChange={setFilterType}>
           <SelectTrigger className="w-32 h-9">
             <Filter className="h-3.5 w-3.5 mr-1" />
@@ -271,7 +271,7 @@ export default function Transactions() {
               key={t_item.transaction.id}
               className="tg-card flex items-center gap-3"
             >
-              <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-lg shrink-0">
+              <div className="w-11 h-11 rounded-2xl bg-secondary flex items-center justify-center text-lg shrink-0">
                 {t_item.categoryIcon || "📦"}
               </div>
               <div className="flex-1 min-w-0">
@@ -340,7 +340,7 @@ export default function Transactions() {
           ))}
         </div>
       ) : (
-        <div className="tg-card text-center py-12">
+        <div className="tg-card text-center py-14">
           <p className="text-muted-foreground">{t("no_transactions")}</p>
         </div>
       )}

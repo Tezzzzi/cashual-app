@@ -31,20 +31,16 @@ export default function Home() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showReceiptScanner, setShowReceiptScanner] = useState(false);
   const [voiceResult, setVoiceResult] = useState<any>(null);
-  // Multi-transaction voice state
   const [showMultiVoiceDialog, setShowMultiVoiceDialog] = useState(false);
   const [multiVoiceTransactions, setMultiVoiceTransactions] = useState<ReviewTransaction[]>([]);
   const [voiceTranscription, setVoiceTranscription] = useState<string>("");
   const utils = trpc.useUtils();
 
-  // Fetch family groups so we can show the combined family balance
   const { data: familyGroups } = trpc.family.myGroups.useQuery(undefined, {
     enabled: isAuthenticated,
   });
   const familyGroupId = familyGroups?.[0]?.group?.id;
 
-  // If the user is in a family group, show the combined balance (all members).
-  // Otherwise, show only their own balance.
   const { data: summary, isLoading: summaryLoading } =
     trpc.reports.summary.useQuery(
       familyGroupId ? { familyGroupId, scope: "all" } : undefined,
@@ -74,10 +70,8 @@ export default function Home() {
   });
 
   const handleVoiceResult = (result: any) => {
-    // Check if multi-transaction response (new format)
     const transactions = result.transactions;
     if (transactions && transactions.length > 1) {
-      // Multiple transactions detected — show multi-transaction review
       setMultiVoiceTransactions(
         transactions.map((tx: any) => ({
           type: tx.type,
@@ -98,7 +92,6 @@ export default function Home() {
       setVoiceTranscription(result.transcription || result.rawTranscription || "");
       setShowMultiVoiceDialog(true);
     } else {
-      // Single transaction — use existing TransactionForm flow
       setVoiceResult(result);
       setShowAddDialog(true);
     }
@@ -131,21 +124,21 @@ export default function Home() {
     );
   }
 
-  // Error state (e.g. opened outside Telegram)
+  // Error state
   if (authState === "error" && !isAuthenticated) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-6">
-        <div className="w-20 h-20 rounded-2xl bg-primary/20 flex items-center justify-center">
+      <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-8">
+        <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center">
           <Wallet className="h-10 w-10 text-primary" />
         </div>
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold">CA$HUAL</h1>
+        <div className="text-center space-y-3">
+          <h1 className="text-3xl font-bold tracking-tight">CA$HUAL</h1>
           <p className="text-muted-foreground text-sm">
             {t("voice_finance_tracker")}
           </p>
         </div>
         {error ? (
-          <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-xl p-4 max-w-xs w-full">
+          <div className="flex items-start gap-3 bg-destructive/10 border border-destructive/20 rounded-2xl p-4 max-w-xs w-full">
             <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
             <p className="text-sm text-destructive">{error}</p>
           </div>
@@ -158,7 +151,6 @@ export default function Home() {
     );
   }
 
-  // Not authenticated but no error (shouldn't happen, but guard)
   if (!isAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-6">
@@ -169,19 +161,19 @@ export default function Home() {
   }
 
   return (
-    <div className="px-4 pt-4 pb-24 space-y-4 max-w-lg mx-auto">
+    <div className="px-5 pt-6 pb-28 space-y-6 max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-muted-foreground">{t("greeting")}</p>
-          <h1 className="text-xl font-bold">
-            {user?.telegramFirstName || user?.name || t("user_fallback")} 👋
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">{t("greeting")}</p>
+          <h1 className="text-2xl font-bold tracking-tight mt-0.5">
+            {user?.telegramFirstName || user?.name || t("user_fallback")}
           </h1>
         </div>
         <Button
           size="icon"
-          variant="outline"
-          className="rounded-full h-10 w-10"
+          variant="ghost"
+          className="rounded-full h-11 w-11 bg-card border border-border hover:bg-secondary"
           onClick={() => {
             setVoiceResult(null);
             setShowAddDialog(true);
@@ -191,54 +183,57 @@ export default function Home() {
         </Button>
       </div>
 
-      {/* Balance Card */}
-      <div className="tg-card bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10">
-        <p className="text-xs text-muted-foreground mb-1">
-          {familyGroupId ? (t("family_balance") || "Семейный баланс") : t("total_balance")}
-        </p>
-        <p className="text-3xl font-bold">
-          {summaryLoading ? (
-            <span className="inline-block w-32 h-9 bg-muted animate-pulse rounded" />
-          ) : (
-            <>
-              {(summary?.balance ?? 0).toLocaleString("ru-RU", {
-                minimumFractionDigits: 2,
-              })}{" "}
-              <span className="text-lg font-normal text-muted-foreground">
-                {user?.preferredCurrency || "AZN"}
-              </span>
-            </>
-          )}
-        </p>
-        <div className="flex gap-4 mt-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-income/20 flex items-center justify-center">
-              <ArrowUpCircle className="h-4 w-4 text-income" />
+      {/* Balance Card — Apple Wallet Style */}
+      <div className="wallet-card wallet-card-primary">
+        <div className="relative z-10">
+          <p className="text-xs text-white/60 uppercase tracking-wider font-medium">
+            {familyGroupId ? (t("family_balance") || "Family Balance") : t("total_balance")}
+          </p>
+          <p className="text-4xl font-bold text-white mt-2 tracking-tight">
+            {summaryLoading ? (
+              <span className="inline-block w-40 h-10 shimmer rounded-lg" />
+            ) : (
+              <>
+                {(summary?.balance ?? 0).toLocaleString("ru-RU", {
+                  minimumFractionDigits: 2,
+                })}
+                <span className="text-lg font-normal text-white/50 ml-2">
+                  {user?.preferredCurrency || "AZN"}
+                </span>
+              </>
+            )}
+          </p>
+
+          <div className="flex gap-6 mt-6">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-income/20 flex items-center justify-center">
+                <ArrowUpCircle className="h-4 w-4 text-income" />
+              </div>
+              <div>
+                <p className="text-[10px] text-white/50 uppercase tracking-wider">{t("income")}</p>
+                <p className="text-sm font-semibold text-income">
+                  {summaryLoading
+                    ? "..."
+                    : (summary?.totalIncome ?? 0).toLocaleString("ru-RU", {
+                        minimumFractionDigits: 2,
+                      })}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">{t("income")}</p>
-              <p className="text-sm font-semibold text-income">
-                {summaryLoading
-                  ? "..."
-                  : (summary?.totalIncome ?? 0).toLocaleString("ru-RU", {
-                      minimumFractionDigits: 2,
-                    })}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-expense/20 flex items-center justify-center">
-              <ArrowDownCircle className="h-4 w-4 text-expense" />
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">{t("expenses")}</p>
-              <p className="text-sm font-semibold text-expense">
-                {summaryLoading
-                  ? "..."
-                  : (summary?.totalExpense ?? 0).toLocaleString("ru-RU", {
-                      minimumFractionDigits: 2,
-                    })}
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-expense/20 flex items-center justify-center">
+                <ArrowDownCircle className="h-4 w-4 text-expense" />
+              </div>
+              <div>
+                <p className="text-[10px] text-white/50 uppercase tracking-wider">{t("expenses")}</p>
+                <p className="text-sm font-semibold text-expense">
+                  {summaryLoading
+                    ? "..."
+                    : (summary?.totalExpense ?? 0).toLocaleString("ru-RU", {
+                        minimumFractionDigits: 2,
+                      })}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -246,33 +241,33 @@ export default function Home() {
 
       {/* Voice Recorder */}
       <div className="tg-card text-center">
-        <p className="text-sm font-medium mb-3">{t("voice_input")}</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-4">{t("voice_input")}</p>
         <VoiceRecorder onResult={handleVoiceResult} />
-        <p className="text-[10px] text-muted-foreground mt-2">RU / AZ / EN</p>
+        <p className="text-[10px] text-muted-foreground mt-3 tracking-wide">RU / AZ / EN</p>
       </div>
 
       {/* Receipt Scanner */}
       <Button
-        variant="outline"
-        className="w-full h-12 gap-2 border-dashed border-primary/40 text-primary hover:bg-primary/10"
+        variant="ghost"
+        className="w-full h-14 gap-3 rounded-2xl border border-border bg-card hover:bg-secondary text-foreground"
         onClick={() => setShowReceiptScanner(true)}
       >
-        <ScanLine className="h-5 w-5" />
-        {t("scan_receipt")}
+        <ScanLine className="h-5 w-5 text-primary" />
+        <span className="font-medium">{t("scan_receipt")}</span>
       </Button>
 
       {/* Recent Transactions */}
       <div className="tg-section">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold">{t("recent_records")}</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{t("recent_records")}</h2>
           <a href="/transactions" className="text-xs text-primary font-medium">
             {t("all_records")}
           </a>
         </div>
         {txnsLoading ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-14 bg-card rounded-xl animate-pulse" />
+              <div key={i} className="h-16 shimmer rounded-2xl" />
             ))}
           </div>
         ) : recentTxns && recentTxns.length > 0 ? (
@@ -280,23 +275,22 @@ export default function Home() {
             {recentTxns.map((t_item) => (
               <div
                 key={t_item.transaction.id}
-                className="tg-card flex items-center gap-3 py-3"
+                className="tg-card flex items-center gap-4 py-4 interactive"
               >
-                <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-lg">
+                <div className="w-11 h-11 rounded-2xl bg-secondary flex items-center justify-center text-lg shrink-0">
                   {t_item.categoryIcon || "📦"}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
                     {t_item.transaction.description || translateCategory(t_item.categoryName || "") || t("transaction_label")}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {translateCategory(t_item.categoryName || "")} ·{" "}
-                    {new Date(t_item.transaction.date).toLocaleDateString("ru-RU")}
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {translateCategory(t_item.categoryName || "")} · {new Date(t_item.transaction.date).toLocaleDateString("ru-RU")}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
                   <p
-                    className={`text-sm font-semibold ${
+                    className={`text-sm font-bold ${
                       t_item.transaction.type === "income"
                         ? "text-income"
                         : "text-expense"
@@ -309,7 +303,7 @@ export default function Home() {
                   </p>
                   {t_item.transaction.originalCurrency &&
                     t_item.transaction.originalCurrency !== (user?.preferredCurrency || "AZN") && (
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
                       {t_item.transaction.type === "income" ? "+" : "-"}
                       {parseFloat(t_item.transaction.originalAmount || "0").toLocaleString("ru-RU", {
                         minimumFractionDigits: 2,
@@ -322,7 +316,7 @@ export default function Home() {
             ))}
           </div>
         ) : (
-          <div className="tg-card text-center py-8">
+          <div className="tg-card text-center py-10">
             <p className="text-sm text-muted-foreground">
               {t("no_records")}
             </p>
@@ -360,7 +354,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Transaction Dialog (single transaction) */}
+      {/* Add Transaction Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-md mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -369,9 +363,9 @@ export default function Home() {
             </DialogTitle>
           </DialogHeader>
           {voiceResult && (
-            <div className="bg-secondary/50 rounded-lg p-3 mb-2">
+            <div className="bg-secondary/50 rounded-xl p-4 mb-2">
               <p className="text-xs text-muted-foreground mb-1">{t("recognized")}</p>
-              <p className="text-sm italic">"{voiceResult.transcription}"</p>
+              <p className="text-sm italic text-foreground/80">"{voiceResult.transcription}"</p>
             </div>
           )}
           <TransactionForm

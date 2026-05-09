@@ -79,12 +79,12 @@ export default function Business() {
   }
 
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="px-5 pt-6 space-y-6 max-w-lg mx-auto pb-28">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Briefcase className="h-5 w-5 text-blue-500" />
-          <h1 className="text-xl font-bold">{t("business_title")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("business_title")}</h1>
         </div>
         <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus className="h-4 w-4 mr-1" />

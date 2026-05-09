@@ -126,7 +126,7 @@ export default function VoiceRecorder({ onResult, language }: VoiceRecorderProps
   if (isProcessing) {
     return (
       <div className="flex flex-col items-center gap-3">
-        <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center">
+        <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center">
           <Loader2 className="h-10 w-10 text-primary animate-spin" />
         </div>
         <p className="text-sm text-muted-foreground">Обработка голоса...</p>
@@ -142,7 +142,7 @@ export default function VoiceRecorder({ onResult, language }: VoiceRecorderProps
         className={`w-20 h-20 rounded-full transition-all ${
           isRecording
             ? "bg-destructive/20 text-destructive voice-pulse"
-            : "bg-primary/20 text-primary hover:bg-primary/30"
+            : "bg-primary/10 text-primary hover:bg-primary/20"
         }`}
         onClick={isRecording ? stopRecording : startRecording}
       >

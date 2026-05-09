@@ -17,8 +17,16 @@ export default function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border safe-bottom">
-      <div className="flex items-center justify-around h-14 max-w-lg mx-auto">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 safe-bottom"
+      style={{
+        background: 'oklch(0.1 0.005 260 / 85%)',
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        borderTop: '1px solid oklch(1 0 0 / 5%)',
+      }}
+    >
+      <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-1">
         {navItems.map((item) => {
           const isActive = location === item.path;
           const Icon = item.icon;
@@ -26,14 +34,19 @@ export default function BottomNav() {
             <Link
               key={item.path}
               href={item.path}
-              className={`flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors ${
+              className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-all duration-200 ${
                 isActive
                   ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground/70 hover:text-foreground/80"
               }`}
             >
-              <Icon className="h-5 w-5" strokeWidth={isActive ? 2.5 : 2} />
-              <span className="text-[10px] font-medium leading-none">
+              <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`}>
+                <Icon className="h-5 w-5" strokeWidth={isActive ? 2.5 : 1.8} />
+                {isActive && (
+                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
+                )}
+              </div>
+              <span className={`text-[9px] font-medium leading-none tracking-wide ${isActive ? 'opacity-100' : 'opacity-60'}`}>
                 {item.label}
               </span>
             </Link>

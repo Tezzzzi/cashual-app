@@ -201,7 +201,7 @@ export default function AiAdvisor() {
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] max-w-lg mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
             <Sparkles className="h-4 w-4 text-primary" />
@@ -219,7 +219,7 @@ export default function AiAdvisor() {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-6">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -287,7 +287,7 @@ export default function AiAdvisor() {
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-border px-4 py-3 bg-background">
+      <div className="border-t border-border/50 px-5 py-4 bg-background">
         <div className="flex items-end gap-2">
           {/* Voice button */}
           <Button

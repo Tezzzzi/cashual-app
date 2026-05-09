@@ -125,10 +125,10 @@ export default function Family() {
   }
 
   return (
-    <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto">
+    <div className="px-5 pt-6 space-y-6 max-w-lg mx-auto pb-28">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">{t("family_mode")}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t("family_mode")}</h1>
         <div className="flex gap-2">
           {!hasGroup && (
             <Button
