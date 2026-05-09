@@ -113,27 +113,13 @@ export default function Transactions() {
     onError: (err) => toast.error(err.message),
   });
 
-  if (!isAuthenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-muted-foreground">{t("login_to_view")}</p>
-      </div>
-    );
-  }
-
-  const scopes: { key: Scope; label: string }[] = [
-    { key: "mine", label: t("scope_personal") },
-    { key: "partner", label: t("scope_partner") },
-    { key: "all", label: t("scope_all") },
-  ];
-
   // Check if a transaction is "new" (created within the last 1 hour)
   const isNewTransaction = (date: number) => {
     const oneHourAgo = Date.now() - 60 * 60 * 1000;
     return date > oneHourAgo;
   };
 
-  // Group transactions by date for date separators
+  // Group transactions by date for date separators — MUST be before any early return (hooks rules)
   const groupedTransactions = useMemo(() => {
     if (!txns) return [];
     const groups: { date: string; label: string; items: typeof txns }[] = [];
@@ -167,6 +153,20 @@ export default function Transactions() {
     }
     return groups;
   }, [txns, t]);
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-muted-foreground">{t("login_to_view")}</p>
+      </div>
+    );
+  }
+
+  const scopes: { key: Scope; label: string }[] = [
+    { key: "mine", label: t("scope_personal") },
+    { key: "partner", label: t("scope_partner") },
+    { key: "all", label: t("scope_all") },
+  ];
 
   // Helper: format amount with dual currency display
   const formatAmount = (txn: any) => {
