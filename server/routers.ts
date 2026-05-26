@@ -136,9 +136,9 @@ const CATEGORY_NAME_ALIASES: Record<string, string> = {
   "car": "Auto",
   "авто": "Auto",
   "машина": "Auto",
-  "home": "Home",
-  "house": "Home",
-  "дом": "Home",
+  "home": "Housing",
+  "house": "Housing",
+  "дом": "Housing",
 };
 
 function categoryAliasKey(name: string) {
@@ -467,7 +467,7 @@ EXAMPLES:
 CATEGORY MATCHING RULES (apply these strictly and return the English name):
 - Hotel minibar, hotel bar, hotel restaurant, room service → use "Restaurants" (NOT "Housing")
 - Any food or drink purchase (cafe, coffee, restaurant, bar, minibar, snacks) → use "Restaurants"
-- Hotel room/accommodation/rent/apartment payment → use "Housing"
+- Hotel room/accommodation/rent/apartment payment, furniture, home goods, home repair, renovation → use "Housing"
 - Taxi, uber, bus, metro, train, flight → use "Transport"
 - Cinema, concert, club, entertainment venue → use "Entertainment"
 - Grocery store, supermarket, food market → use "Food"
@@ -484,8 +484,7 @@ CATEGORY MATCHING RULES (apply these strictly and return the English name):
 - Sports, gym, fitness, swimming pool, yoga → NEW category "Sports" with emoji 🏋️
 - Education, course, tuition, books, school, university → use or create "Education" with emoji 📚
 - Charity, donation → NEW category "Charity" with emoji 🤝
-- Car repair, car service, car wash, parking, fuel/gas → NEW category "Auto" with emoji 🚗
-- Furniture, home goods, home repair, renovation → NEW category "Home" with emoji 🏠
+- Car repair, car service, car wash, parking, fuel/gas → use "Auto" with emoji 🚗
 - Alimony, child support payment → use "Alimony" with emoji 💸
 - Money sent to parents, family support, helping parents → use "Parents Support" with emoji 👨‍👩‍👦
 - Child expenses, son expenses, Maksud → use "Maksud" with emoji 👶
@@ -769,7 +768,7 @@ For each transaction:
 	CATEGORY MATCHING RULES (apply these strictly and return the English name):
 	- Hotel minibar, hotel bar, hotel restaurant, room service -> use "Restaurants" (NOT "Housing")
 	- Any food or drink purchase (cafe, coffee, restaurant, bar, minibar, snacks) -> use "Restaurants"
-	- Hotel room/accommodation/rent/apartment payment -> use "Housing"
+	- Hotel room/accommodation/rent/apartment payment, furniture, home goods, home repair, renovation -> use "Housing"
 	- Taxi, uber, bus, metro, train, flight -> use "Transport"
 	- Cinema, concert, club, entertainment venue -> use "Entertainment"
 	- Grocery store, supermarket, food market -> use "Food"
@@ -786,8 +785,7 @@ For each transaction:
 	- Sports, gym, fitness, swimming pool, yoga -> NEW category "Sports" with emoji 🏋️
 	- Education, course, tuition, books, school, university -> use or create "Education" with emoji 📚
 	- Charity, donation -> NEW category "Charity" with emoji 🤝
-	- Car repair, car service, car wash, parking, fuel/gas -> NEW category "Auto" with emoji 🚗
-	- Furniture, home goods, home repair, renovation -> NEW category "Home" with emoji 🏠
+	- Car repair, car service, car wash, parking, fuel/gas -> use "Auto" with emoji 🚗
 	- Alimony, child support payment -> use "Alimony" with emoji 💸
 	- Money sent to parents, family support, helping parents -> use "Parents Support" with emoji 👨‍👩‍👦
 	- Child expenses, son expenses, Maksud -> use "Maksud" with emoji 👶
