@@ -486,6 +486,9 @@ CATEGORY MATCHING RULES (apply these strictly and return the English name):
 - Charity, donation → NEW category "Charity" with emoji 🤝
 - Car repair, car service, car wash, parking, fuel/gas → NEW category "Auto" with emoji 🚗
 - Furniture, home goods, home repair, renovation → NEW category "Home" with emoji 🏠
+- Alimony, child support payment → use "Alimony" with emoji 💸
+- Money sent to parents, family support, helping parents → use "Parents Support" with emoji 👨‍👩‍👦
+- Child expenses, son expenses, Maksud → use "Maksud" with emoji 👶
 - Anything else that does NOT fit any category above → create a NEW category with a short descriptive English name and an appropriate emoji
 
 NEW CATEGORY RULE: If the transaction does NOT match any existing category well, set categoryName to a NEW descriptive English name (NOT "Other") and set newCategoryEmoji to a single appropriate emoji. The system will auto-create this category for the user.
@@ -785,6 +788,9 @@ For each transaction:
 	- Charity, donation -> NEW category "Charity" with emoji 🤝
 	- Car repair, car service, car wash, parking, fuel/gas -> NEW category "Auto" with emoji 🚗
 	- Furniture, home goods, home repair, renovation -> NEW category "Home" with emoji 🏠
+	- Alimony, child support payment -> use "Alimony" with emoji 💸
+	- Money sent to parents, family support, helping parents -> use "Parents Support" with emoji 👨‍👩‍👦
+	- Child expenses, son expenses, Maksud -> use "Maksud" with emoji 👶
 	- Anything else that does NOT fit any category above -> create a NEW category with a short descriptive English name and an appropriate emoji
 
 	NEW CATEGORY RULE: If the transaction does NOT match any existing category well, set categoryName to a NEW descriptive English name (NOT "Other") and set newCategoryEmoji to a single appropriate emoji. The system will auto-create this category for the user.

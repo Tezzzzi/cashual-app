@@ -776,6 +776,9 @@ export const categoryTranslations: Record<string, { ru: string; az: string; en: 
   Sports:        { ru: "Спорт",              az: "İdman",          en: "Sports" },
   Charity:       { ru: "Благотворительность", az: "Xeyriyyə",      en: "Charity" },
   Home:          { ru: "Дом",                az: "Ev",             en: "Home" },
+  Alimony:       { ru: "Алименты",           az: "Aliment",        en: "Alimony" },
+  "Parents Support": { ru: "Помощь родителям", az: "Valideynlərə dəstək", en: "Parents Support" },
+  Maksud:        { ru: "Максуд",             az: "Maksud",         en: "Maksud" },
 };
 
 const categoryTranslationAliases: Record<string, keyof typeof categoryTranslations> = {
@@ -845,6 +848,12 @@ const categoryTranslationAliases: Record<string, keyof typeof categoryTranslatio
   "home": "Home",
   "house": "Home",
   "дом": "Home",
+  "alimony": "Alimony",
+  "алименты": "Alimony",
+  "parents support": "Parents Support",
+  "помощь родителям": "Parents Support",
+  "maksud": "Maksud",
+  "максуд": "Maksud",
 };
 
 export type Lang = keyof typeof translations;

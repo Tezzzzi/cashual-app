@@ -226,13 +226,26 @@ try {
   console.warn('[startup] Category canonicalization warning (non-fatal):', err.message);
 }
 
-// Fix category icons: Transport = 🚌, Auto = 🚗
+// Fix category icons: Transport = 🚌, Auto = 🚗, Maksud = 👶
 try {
   if (process.env.DATABASE_URL) {
-    console.log('[startup] Updating category icons (Transport=🚌, Auto=🚗)...');
+    console.log('[startup] Updating category icons (Transport=🚌, Auto=🚗, Maksud=👶)...');
     const iconConn = await mysql.createConnection(process.env.DATABASE_URL);
     await iconConn.execute("UPDATE categories SET icon = '🚌' WHERE name = 'Transport'");
     await iconConn.execute("UPDATE categories SET icon = '🚗' WHERE name = 'Auto'");
+    await iconConn.execute("UPDATE categories SET icon = '👶' WHERE name = 'Maksud'");
+    // Create Alimony category if not exists
+    const [alimonyRows] = await iconConn.execute("SELECT id FROM categories WHERE name = 'Alimony' LIMIT 1");
+    if (alimonyRows.length === 0) {
+      await iconConn.execute("INSERT INTO categories (name, icon, color, type, isPreset) VALUES ('Alimony', '💸', '#ef4444', 'expense', true)");
+      console.log('[startup] Created Alimony category');
+    }
+    // Create Parents Support category if not exists
+    const [parentsRows] = await iconConn.execute("SELECT id FROM categories WHERE name = 'Parents Support' LIMIT 1");
+    if (parentsRows.length === 0) {
+      await iconConn.execute("INSERT INTO categories (name, icon, color, type, isPreset) VALUES ('Parents Support', '👨\u200d👩\u200d👦', '#8b5cf6', 'expense', true)");
+      console.log('[startup] Created Parents Support category');
+    }
     console.log('[startup] Category icons updated');
     await iconConn.end();
   }
