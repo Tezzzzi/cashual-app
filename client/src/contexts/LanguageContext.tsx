@@ -37,6 +37,7 @@ const translations = {
     income_btn: "Доход",
     amount: "Сумма",
     currency: "Валюта",
+    will_convert_to: "будет конвертировано в",
     category: "Категория",
     select_category: "Выберите категорию",
     description: "Описание",
@@ -285,6 +286,7 @@ const translations = {
     income_btn: "Gəlir",
     amount: "Məbləğ",
     currency: "Valyuta",
+    will_convert_to: "çevriləcək",
     category: "Kateqoriya",
     select_category: "Kateqoriya seçin",
     description: "Təsvir",
@@ -533,6 +535,7 @@ const translations = {
     income_btn: "Income",
     amount: "Amount",
     currency: "Currency",
+    will_convert_to: "will be converted to",
     category: "Category",
     select_category: "Select category",
     description: "Description",
@@ -750,23 +753,98 @@ const translations = {
 } as const;
 
 // ─── Category Name Translations ───────────────────────────────────────────────
-// Maps Russian preset category names → AZ and EN equivalents
-export const categoryTranslations: Record<string, { az: string; en: string }> = {
-  "Продукты":     { az: "Ərzaq",          en: "Groceries" },
-  "Транспорт":    { az: "Nəqliyyat",      en: "Transport" },
-  "Жильё":        { az: "Mənzil",         en: "Housing" },
-  "Развлечения":  { az: "Əyləncə",        en: "Entertainment" },
-  "Здоровье":     { az: "Sağlamlıq",      en: "Health" },
-  "Одежда":       { az: "Geyim",          en: "Clothing" },
-  "Образование":  { az: "Təhsil",         en: "Education" },
-  "Рестораны":    { az: "Restoranlar",    en: "Restaurants" },
-  "Связь":        { az: "Rabitə",         en: "Communication" },
-  "Подписки":     { az: "Abunəliklər",    en: "Subscriptions" },
-  "Подарки":      { az: "Hədiyyələr",     en: "Gifts" },
-  "Зарплата":     { az: "Maaş",           en: "Salary" },
-  "Фриланс":      { az: "Frilansinq",     en: "Freelance" },
-  "Инвестиции":   { az: "İnvestisiyalar", en: "Investments" },
-  "Другое":       { az: "Digər",          en: "Other" },
+// Categories are stored canonically in English; this dictionary localizes display names.
+export const categoryTranslations: Record<string, { ru: string; az: string; en: string }> = {
+  Food:          { ru: "Еда",                az: "Ərzaq",          en: "Food" },
+  Transport:     { ru: "Транспорт",          az: "Nəqliyyat",      en: "Transport" },
+  Housing:       { ru: "Жильё",              az: "Mənzil",         en: "Housing" },
+  Entertainment: { ru: "Развлечения",        az: "Əyləncə",        en: "Entertainment" },
+  Health:        { ru: "Здоровье",           az: "Sağlamlıq",      en: "Health" },
+  Clothing:      { ru: "Одежда",             az: "Geyim",          en: "Clothing" },
+  Education:     { ru: "Образование",        az: "Təhsil",         en: "Education" },
+  Restaurants:   { ru: "Рестораны",          az: "Restoranlar",    en: "Restaurants" },
+  Communication: { ru: "Связь",              az: "Rabitə",         en: "Communication" },
+  Subscriptions: { ru: "Подписки",           az: "Abunəliklər",    en: "Subscriptions" },
+  Gifts:         { ru: "Подарки",            az: "Hədiyyələr",     en: "Gifts" },
+  Salary:        { ru: "Зарплата",           az: "Maaş",           en: "Salary" },
+  Freelance:     { ru: "Фриланс",            az: "Frilansinq",     en: "Freelance" },
+  Investments:   { ru: "Инвестиции",         az: "İnvestisiyalar", en: "Investments" },
+  Other:         { ru: "Другое",             az: "Digər",          en: "Other" },
+  Auto:          { ru: "Авто",               az: "Avto",           en: "Auto" },
+  Pets:          { ru: "Питомцы",            az: "Ev heyvanları",  en: "Pets" },
+  Beauty:        { ru: "Красота",            az: "Gözəllik",       en: "Beauty" },
+  Sports:        { ru: "Спорт",              az: "İdman",          en: "Sports" },
+  Charity:       { ru: "Благотворительность", az: "Xeyriyyə",      en: "Charity" },
+  Home:          { ru: "Дом",                az: "Ev",             en: "Home" },
+};
+
+const categoryTranslationAliases: Record<string, keyof typeof categoryTranslations> = {
+  "food": "Food",
+  "foods": "Food",
+  "grocery": "Food",
+  "groceries": "Food",
+  "продукты": "Food",
+  "еда": "Food",
+  "питание": "Food",
+  "transport": "Transport",
+  "transportation": "Transport",
+  "транспорт": "Transport",
+  "housing": "Housing",
+  "rent": "Housing",
+  "жильё": "Housing",
+  "жилье": "Housing",
+  "entertainment": "Entertainment",
+  "развлечения": "Entertainment",
+  "health": "Health",
+  "здоровье": "Health",
+  "clothing": "Clothing",
+  "clothes": "Clothing",
+  "одежда": "Clothing",
+  "education": "Education",
+  "образование": "Education",
+  "restaurants": "Restaurants",
+  "restaurant": "Restaurants",
+  "рестораны": "Restaurants",
+  "ресторан": "Restaurants",
+  "communication": "Communication",
+  "communications": "Communication",
+  "связь": "Communication",
+  "subscriptions": "Subscriptions",
+  "subscription": "Subscriptions",
+  "подписки": "Subscriptions",
+  "подписка": "Subscriptions",
+  "gifts": "Gifts",
+  "gift": "Gifts",
+  "подарки": "Gifts",
+  "подарок": "Gifts",
+  "salary": "Salary",
+  "wage": "Salary",
+  "зарплата": "Salary",
+  "freelance": "Freelance",
+  "freelancing": "Freelance",
+  "фриланс": "Freelance",
+  "investments": "Investments",
+  "investment": "Investments",
+  "инвестиции": "Investments",
+  "other": "Other",
+  "другое": "Other",
+  "auto": "Auto",
+  "car": "Auto",
+  "авто": "Auto",
+  "pets": "Pets",
+  "pet": "Pets",
+  "питомцы": "Pets",
+  "beauty": "Beauty",
+  "красота": "Beauty",
+  "sports": "Sports",
+  "sport": "Sports",
+  "спорт": "Sports",
+  "charity": "Charity",
+  "donation": "Charity",
+  "благотворительность": "Charity",
+  "home": "Home",
+  "house": "Home",
+  "дом": "Home",
 };
 
 export type Lang = keyof typeof translations;
@@ -778,14 +856,14 @@ type LanguageContextType = {
   lang: Lang;
   setLang: (lang: Lang) => void;
   t: (key: TranslationKey) => string;
-  translateCategory: (ruName: string) => string;
+  translateCategory: (categoryName: string) => string;
 };
 
 const LanguageContext = createContext<LanguageContextType>({
   lang: "ru",
   setLang: () => {},
   t: (key) => translations.ru[key],
-  translateCategory: (ruName) => ruName,
+  translateCategory: (categoryName) => categoryName,
 });
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -832,12 +910,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     return (translations[lang] as any)[key] ?? (translations.ru as any)[key] ?? key;
   };
 
-  // Translate a Russian category name to the current language
-  const translateCategory = (ruName: string): string => {
-    if (lang === "ru") return ruName;
-    const entry = categoryTranslations[ruName];
-    if (!entry) return ruName; // fallback: keep Russian for custom categories
-    return lang === "az" ? entry.az : entry.en;
+  // Translate a canonical English category name (or known legacy alias) to the current language.
+  const translateCategory = (categoryName: string): string => {
+    const trimmed = categoryName.trim();
+    if (!trimmed) return trimmed;
+    const canonicalName = categoryTranslationAliases[trimmed.toLowerCase()] ?? trimmed;
+    const entry = categoryTranslations[canonicalName];
+    if (!entry) return trimmed; // fallback: keep unknown custom categories in stored English
+    return entry[lang] ?? entry.en;
   };
 
   return (

@@ -141,5 +141,90 @@ try {
   console.warn('[startup] businessGroupId cleanup warning (non-fatal):', err.message);
 }
 
+
+// Canonicalize legacy localized category names to English and merge duplicates.
+// Idempotent: if an English target exists, transactions are moved to it and the localized duplicate is removed;
+// otherwise the localized category is renamed to the English canonical name.
+try {
+  if (process.env.DATABASE_URL) {
+    console.log('[startup] Canonicalizing category names to English and merging localized duplicates...');
+    const categoryConn = await mysql.createConnection(process.env.DATABASE_URL);
+    const categoryGroups = [
+      { english: 'Food', aliases: ['Продукты', 'Еда', 'Питание', 'Groceries'] },
+      { english: 'Transport', aliases: ['Транспорт'] },
+      { english: 'Housing', aliases: ['Жильё', 'Жилье', 'Аренда'] },
+      { english: 'Entertainment', aliases: ['Развлечения'] },
+      { english: 'Health', aliases: ['Здоровье'] },
+      { english: 'Clothing', aliases: ['Одежда'] },
+      { english: 'Education', aliases: ['Образование'] },
+      { english: 'Restaurants', aliases: ['Рестораны', 'Ресторан', 'Кафе'] },
+      { english: 'Communication', aliases: ['Связь'] },
+      { english: 'Subscriptions', aliases: ['Подписки', 'Подписка'] },
+      { english: 'Gifts', aliases: ['Подарки', 'Подарок'] },
+      { english: 'Salary', aliases: ['Зарплата'] },
+      { english: 'Freelance', aliases: ['Фриланс'] },
+      { english: 'Investments', aliases: ['Инвестиции'] },
+      { english: 'Other', aliases: ['Другое', 'Разное'] },
+      { english: 'Auto', aliases: ['Авто', 'Машина'] },
+      { english: 'Pets', aliases: ['Питомцы', 'Питомец'] },
+      { english: 'Beauty', aliases: ['Красота'] },
+      { english: 'Sports', aliases: ['Спорт'] },
+      { english: 'Charity', aliases: ['Благотворительность'] },
+      { english: 'Home', aliases: ['Дом'] },
+    ];
+
+    let movedTransactions = 0;
+    let deletedCategories = 0;
+    let renamedCategories = 0;
+
+    const scopeMatches = (a, b) => Boolean(a.isPreset) === Boolean(b.isPreset) && (a.userId ?? null) === (b.userId ?? null);
+
+    for (const group of categoryGroups) {
+      const names = [group.english, ...group.aliases];
+      const placeholders = names.map(() => '?').join(', ');
+      const [rows] = await categoryConn.execute(
+        `SELECT id, name, isPreset, userId FROM categories WHERE name IN (${placeholders}) ORDER BY isPreset DESC, userId IS NULL DESC, id ASC`,
+        names
+      );
+
+      const categories = rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        isPreset: row.isPreset === 1 || row.isPreset === true,
+        userId: row.userId,
+      }));
+
+      for (const localized of categories.filter((cat) => cat.name !== group.english)) {
+        let target = categories.find((cat) => cat.name === group.english && scopeMatches(cat, localized));
+        if (!target && localized.isPreset) {
+          target = categories.find((cat) => cat.name === group.english && cat.isPreset);
+        }
+        if (!target && !localized.isPreset) {
+          target = categories.find((cat) => cat.name === group.english && !cat.isPreset && cat.userId === localized.userId);
+        }
+
+        if (!target) {
+          await categoryConn.execute('UPDATE categories SET name = ? WHERE id = ?', [group.english, localized.id]);
+          localized.name = group.english;
+          categories.push(localized);
+          renamedCategories += 1;
+          continue;
+        }
+
+        if (target.id === localized.id) continue;
+        const [txRows] = await categoryConn.execute('UPDATE transactions SET categoryId = ? WHERE categoryId = ?', [target.id, localized.id]);
+        movedTransactions += txRows.affectedRows || 0;
+        const [deleteRows] = await categoryConn.execute('DELETE FROM categories WHERE id = ?', [localized.id]);
+        deletedCategories += deleteRows.affectedRows || 0;
+      }
+    }
+
+    console.log(`[startup] Category canonicalization complete: moved ${movedTransactions} transactions, renamed ${renamedCategories} categories, deleted ${deletedCategories} duplicates`);
+    await categoryConn.end();
+  }
+} catch (err) {
+  console.warn('[startup] Category canonicalization warning (non-fatal):', err.message);
+}
+
 // Now start the actual server
 await import('./dist/index.js');

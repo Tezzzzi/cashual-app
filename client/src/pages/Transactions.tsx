@@ -331,7 +331,7 @@ export default function Transactions() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium truncate text-foreground">
-                            {t_item.transaction.description || translateCategory(t_item.categoryName || "Другое") || t("transactions_title")}
+                            {t_item.transaction.description || translateCategory(t_item.categoryName || "Other") || t("transactions_title")}
                           </p>
                           {isNew && <span className="new-badge">NEW</span>}
                           {t_item.transaction.isFamily && (

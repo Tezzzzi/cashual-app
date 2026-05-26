@@ -181,7 +181,7 @@ export default function Reports() {
   const pieData = useMemo(() => {
     if (!byCategory) return [];
     return byCategory.map((c) => ({
-      name: translateCategory(c.categoryName || "Другое"),
+      name: translateCategory(c.categoryName || "Other"),
       value: parseFloat(c.total || "0"),
       color: c.categoryColor || "#6366f1",
       icon: c.categoryIcon || "📦",

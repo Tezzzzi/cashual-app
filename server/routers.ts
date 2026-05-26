@@ -42,6 +42,137 @@ import { invokeLLM } from "./_core/openai-llm";
 import { convertCurrency } from "./exchange-rates";
 import { ENV } from "./_core/env";
 
+// ─── Category Canonicalization ─────────────────────────────────────────
+// Categories are stored canonically in English. UI translates them for display.
+const CATEGORY_NAME_ALIASES: Record<string, string> = {
+  "food": "Food",
+  "foods": "Food",
+  "grocery": "Food",
+  "groceries": "Food",
+  "продукты": "Food",
+  "еда": "Food",
+  "питание": "Food",
+  "ərzaq": "Food",
+  "yemək": "Food",
+  "transport": "Transport",
+  "transportation": "Transport",
+  "транспорт": "Transport",
+  "такси": "Transport",
+  "nəqliyyat": "Transport",
+  "housing": "Housing",
+  "rent": "Housing",
+  "accommodation": "Housing",
+  "жильё": "Housing",
+  "жилье": "Housing",
+  "аренда": "Housing",
+  "mənzil": "Housing",
+  "entertainment": "Entertainment",
+  "развлечения": "Entertainment",
+  "əyləncə": "Entertainment",
+  "health": "Health",
+  "healthcare": "Health",
+  "здоровье": "Health",
+  "sağlamlıq": "Health",
+  "clothing": "Clothing",
+  "clothes": "Clothing",
+  "одежда": "Clothing",
+  "geyim": "Clothing",
+  "education": "Education",
+  "образование": "Education",
+  "təhsil": "Education",
+  "restaurants": "Restaurants",
+  "restaurant": "Restaurants",
+  "dining": "Restaurants",
+  "кафе": "Restaurants",
+  "рестораны": "Restaurants",
+  "ресторан": "Restaurants",
+  "restoranlar": "Restaurants",
+  "communication": "Communication",
+  "communications": "Communication",
+  "phone": "Communication",
+  "internet": "Communication",
+  "связь": "Communication",
+  "rabitə": "Communication",
+  "subscriptions": "Subscriptions",
+  "subscription": "Subscriptions",
+  "подписки": "Subscriptions",
+  "подписка": "Subscriptions",
+  "abunəliklər": "Subscriptions",
+  "gifts": "Gifts",
+  "gift": "Gifts",
+  "подарки": "Gifts",
+  "подарок": "Gifts",
+  "hədiyyələr": "Gifts",
+  "salary": "Salary",
+  "wage": "Salary",
+  "зарплата": "Salary",
+  "maaş": "Salary",
+  "freelance": "Freelance",
+  "freelancing": "Freelance",
+  "фриланс": "Freelance",
+  "frilansinq": "Freelance",
+  "investments": "Investments",
+  "investment": "Investments",
+  "инвестиции": "Investments",
+  "инвестиция": "Investments",
+  "investisiyalar": "Investments",
+  "other": "Other",
+  "другое": "Other",
+  "разное": "Other",
+  "digər": "Other",
+  "pets": "Pets",
+  "pet": "Pets",
+  "питомцы": "Pets",
+  "питомец": "Pets",
+  "beauty": "Beauty",
+  "красота": "Beauty",
+  "sports": "Sports",
+  "sport": "Sports",
+  "спорт": "Sports",
+  "charity": "Charity",
+  "donation": "Charity",
+  "благотворительность": "Charity",
+  "auto": "Auto",
+  "car": "Auto",
+  "авто": "Auto",
+  "машина": "Auto",
+  "home": "Home",
+  "house": "Home",
+  "дом": "Home",
+};
+
+function categoryAliasKey(name: string) {
+  return name.trim().toLowerCase();
+}
+
+function normalizeCategoryNameToEnglish(name: string) {
+  const trimmed = name.trim();
+  return CATEGORY_NAME_ALIASES[categoryAliasKey(trimmed)] || trimmed;
+}
+
+function buildCategoryPromptList(userCategories: Array<{ name: string }>) {
+  const canonicalNames = Array.from(
+    new Set(userCategories.map((c) => normalizeCategoryNameToEnglish(c.name)).filter(Boolean))
+  );
+  return canonicalNames.length > 0 ? canonicalNames.map((name) => `"${name}"`).join(", ") : "(none)";
+}
+
+function findCategoryByCanonicalName<T extends { name: string }>(userCategories: T[], categoryName: string) {
+  const canonicalName = normalizeCategoryNameToEnglish(categoryName);
+  const canonicalKey = categoryAliasKey(canonicalName);
+  return (
+    userCategories.find((c) => categoryAliasKey(normalizeCategoryNameToEnglish(c.name)) === canonicalKey) ||
+    userCategories.find((c) => {
+      const existingKey = categoryAliasKey(normalizeCategoryNameToEnglish(c.name));
+      return existingKey.includes(canonicalKey) || canonicalKey.includes(existingKey);
+    })
+  );
+}
+
+function getFallbackCategory<T extends { name: string }>(userCategories: T[]) {
+  return findCategoryByCanonicalName(userCategories, "Other") || userCategories[userCategories.length - 1];
+}
+
 // Seed preset categories on startup
 seedPresetCategories().catch(console.error);
 
@@ -61,8 +192,13 @@ const categoriesRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const canonicalName = normalizeCategoryNameToEnglish(input.name);
+      const existing = findCategoryByCanonicalName(await getCategories(ctx.user.id), canonicalName);
+      if (existing) return { id: existing.id };
+
       return createCategory({
         ...input,
+        name: canonicalName,
         userId: ctx.user.id,
         isPreset: false,
       });
@@ -263,7 +399,7 @@ const voiceRouter = router({
 
       // Step 2: Get user's categories and business groups for context
       const userCategories = await getCategories(ctx.user.id);
-      const categoryNames = userCategories.map((c) => c.name).join(", ");
+      const categoryNames = buildCategoryPromptList(userCategories);
       const userBusinessGroups = await getBusinessGroups(ctx.user.id);
       const businessGroupNames = userBusinessGroups.length > 0
         ? userBusinessGroups.map((g, i) => `${i + 1}. "${g.name}"`).join(", ")
@@ -281,7 +417,13 @@ const voiceRouter = router({
 
 **CRITICAL: The user may dictate MULTIPLE transactions in a single message.** Each distinct expense/income mentioned should be a separate transaction in the array. Look for conjunctions like "и" (and), "а также", "плюс", "ещё", commas separating amounts, or different budget contexts as signals of multiple transactions.
 
-Available categories: ${categoryNames}
+Available categories (canonical English names; choose one of these first when semantically appropriate): ${categoryNames}
+
+CATEGORY LANGUAGE RULES:
+- ALWAYS return categoryName in English, regardless of the transcription language.
+- Match semantically across languages before creating a category. For example, Russian "авто" must match an existing "Auto" category, and Russian "еда" must match "Food".
+- If none of the available categories fits well, create a new short descriptive category name in English and set newCategoryEmoji.
+- Never return Russian, Azerbaijani, or mixed-language category names.
 
 **IMPORTANT — TODAY'S DATE: ${now.toISOString()} (year ${currentYear})**
 The current Unix timestamp in milliseconds is: ${todayMs}
@@ -291,7 +433,7 @@ User's preferred currency: ${ctx.user.preferredCurrency || "AZN"}
 
 Rules for EACH transaction:
 - Determine if it's income or expense from context
-- Match to the closest available category name
+- Match semantically to the closest available category name and return that categoryName in English
 - Extract the amount (number only)
 - Determine the currency from context clues:
   * "манат" / "manat" / "AZN" → AZN
@@ -322,31 +464,31 @@ EXAMPLES:
   "business lunch 30 USD and personal groceries 50" → 2 transactions: [lunch 30 USD work, groceries 50 personal]
   "зарплата 5000 и потратил 200 на одежду" → 2 transactions: [salary 5000 income, clothing 200 expense]
 
-CATEGORY MATCHING RULES (apply these strictly):
-- Hotel minibar, hotel bar, hotel restaurant, room service → use "Рестораны" (NOT "Жильё")
-- Any food or drink purchase (cafe, coffee, restaurant, bar, minibar, snacks) → use "Рестораны"
-- Hotel room/accommodation/rent/apartment payment → use "Жильё"
-- Taxi, uber, bus, metro, train, flight → use "Транспорт"
-- Cinema, concert, club, entertainment venue → use "Развлечения"
-- Grocery store, supermarket, food market → use "Продукты"
-- Pharmacy, doctor, clinic, medicine → use "Здоровье"
-- Clothing store, shoes, fashion → use "Одежда"
-- Internet, phone plan, mobile top-up → use "Связь"
-- Netflix, Spotify, app subscription → use "Подписки"
-- Gift, present → use "Подарки"
-- Salary, wage → use "Зарплата"
-- Freelance work payment → use "Фриланс"
-- Stock, crypto, investment → use "Инвестиции"
-- Vet, veterinary, pet care, pet food, pet supplies → NEW category "Питомцы" with emoji 🐾
-- Beauty salon, haircut, spa, manicure, pedicure, cosmetics → NEW category "Красота" with emoji 💅
-- Sports, gym, fitness, swimming pool, yoga → NEW category "Спорт" with emoji 🏋️
-- Education, course, tuition, books, school, university → NEW category "Образование" with emoji 📚
-- Charity, donation → NEW category "Благотворительность" with emoji 🤝
-- Car repair, car service, car wash, parking, fuel/gas → NEW category "Авто" with emoji 🚗
-- Furniture, home goods, home repair, renovation → NEW category "Дом" with emoji 🏠
-- Anything else that does NOT fit any category above → create a NEW category with a short descriptive name and an appropriate emoji
+CATEGORY MATCHING RULES (apply these strictly and return the English name):
+- Hotel minibar, hotel bar, hotel restaurant, room service → use "Restaurants" (NOT "Housing")
+- Any food or drink purchase (cafe, coffee, restaurant, bar, minibar, snacks) → use "Restaurants"
+- Hotel room/accommodation/rent/apartment payment → use "Housing"
+- Taxi, uber, bus, metro, train, flight → use "Transport"
+- Cinema, concert, club, entertainment venue → use "Entertainment"
+- Grocery store, supermarket, food market → use "Food"
+- Pharmacy, doctor, clinic, medicine → use "Health"
+- Clothing store, shoes, fashion → use "Clothing"
+- Internet, phone plan, mobile top-up → use "Communication"
+- Netflix, Spotify, app subscription → use "Subscriptions"
+- Gift, present → use "Gifts"
+- Salary, wage → use "Salary"
+- Freelance work payment → use "Freelance"
+- Stock, crypto, investment → use "Investments"
+- Vet, veterinary, pet care, pet food, pet supplies → NEW category "Pets" with emoji 🐾
+- Beauty salon, haircut, spa, manicure, pedicure, cosmetics → NEW category "Beauty" with emoji 💅
+- Sports, gym, fitness, swimming pool, yoga → NEW category "Sports" with emoji 🏋️
+- Education, course, tuition, books, school, university → use or create "Education" with emoji 📚
+- Charity, donation → NEW category "Charity" with emoji 🤝
+- Car repair, car service, car wash, parking, fuel/gas → NEW category "Auto" with emoji 🚗
+- Furniture, home goods, home repair, renovation → NEW category "Home" with emoji 🏠
+- Anything else that does NOT fit any category above → create a NEW category with a short descriptive English name and an appropriate emoji
 
-NEW CATEGORY RULE: If the transaction does NOT match any existing category well, set categoryName to a NEW descriptive name (NOT "Другое") and set newCategoryEmoji to a single appropriate emoji. The system will auto-create this category for the user.
+NEW CATEGORY RULE: If the transaction does NOT match any existing category well, set categoryName to a NEW descriptive English name (NOT "Other") and set newCategoryEmoji to a single appropriate emoji. The system will auto-create this category for the user.
 If the transaction DOES match an existing category, set newCategoryEmoji to empty string "".
 
 Always return a transactions array, even for a single transaction (array with one item).`,
@@ -373,7 +515,7 @@ Always return a transactions array, even for a single transaction (array with on
                       type: { type: "string", enum: ["income", "expense"], description: "Transaction type" },
                       amount: { type: "number", description: "Transaction amount" },
                       currency: { type: "string", description: "Currency code (AZN, USD, EUR, RUB, etc.)" },
-                      categoryName: { type: "string", description: "Best matching category name from the available list, OR a new descriptive name if nothing fits" },
+                      categoryName: { type: "string", description: "Best matching English category name from the available list, OR a new descriptive English name if nothing fits" },
                       newCategoryEmoji: { type: "string", description: "Single emoji for a new category if categoryName is NOT in the available list. Empty string if using an existing category." },
                       description: { type: "string", description: "Short description of the transaction" },
                       date: { type: "number", description: "Unix timestamp in milliseconds" },
@@ -412,20 +554,16 @@ Always return a transactions array, even for a single transaction (array with on
         }>;
       };
 
-      // Helper: find existing category (exact or partial match)
-      const findExistingCategory = (categoryName: string) => {
-        return (
-          userCategories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase()) ||
-          userCategories.find((c) => c.name.toLowerCase().includes(categoryName.toLowerCase()))
-        );
-      };
+      // Helper: find existing category by semantic/canonical English name
+      const findExistingCategory = (categoryName: string) => findCategoryByCanonicalName(userCategories, categoryName);
 
       // Helper: auto-create a new user category if it doesn't exist yet
       const autoCreateCategory = async (name: string, emoji: string) => {
-        const existing = findExistingCategory(name);
+        const canonicalName = normalizeCategoryNameToEnglish(name);
+        const existing = findExistingCategory(canonicalName);
         if (existing) return existing;
         const result = await createCategory({
-          name,
+          name: canonicalName,
           icon: emoji || "📦",
           color: "#6366f1",
           type: "both",
@@ -434,7 +572,16 @@ Always return a transactions array, even for a single transaction (array with on
         });
         if (!result) return userCategories[userCategories.length - 1];
         // Return a synthetic category object
-        return { id: result.id, name, icon: emoji || "📦", color: "#6366f1" };
+        return {
+          id: result.id,
+          name: canonicalName,
+          icon: emoji || "📦",
+          color: "#6366f1",
+          type: "both" as const,
+          isPreset: false,
+          userId: ctx.user.id,
+          createdAt: new Date(),
+        };
       };
 
       // Helper: match business group
@@ -476,8 +623,8 @@ Always return a transactions array, even for a single transaction (array with on
           cat = await autoCreateCategory(tx.categoryName, tx.newCategoryEmoji);
         }
         if (!cat) {
-          // Last resort fallback to "Другое" or last category
-          cat = userCategories.find((c) => c.name === "Другое") || userCategories[userCategories.length - 1];
+          // Last resort fallback to "Other" or last category
+          cat = getFallbackCategory(userCategories);
         }
 
         const bg = tx.budgetContext === "work" ? matchBusinessGroup(tx.businessGroupName) : null;
@@ -514,7 +661,7 @@ Always return a transactions array, even for a single transaction (array with on
           type: "expense" as const,
           amount: 0,
           currency: ctx.user.preferredCurrency || "AZN",
-          categoryName: "Другое",
+          categoryName: "Other",
           categoryIcon: "📦",
           description: "",
           date: todayMs,
@@ -570,7 +717,7 @@ Always return a transactions array, even for a single transaction (array with on
 
       // Get user's categories for context
       const userCategories = await getCategories(ctx.user.id);
-      const categoryNames = userCategories.map((c) => c.name).join(", ");
+      const categoryNames = buildCategoryPromptList(userCategories);
 
       const now = new Date();
       const currentYear = now.getFullYear();
@@ -581,9 +728,15 @@ Always return a transactions array, even for a single transaction (array with on
             role: "system",
             content: `You are a financial transaction image parser. Analyze the provided image and extract transaction data.
 
-Available categories: ${categoryNames}
+	Available categories (canonical English names; choose one of these first when semantically appropriate): ${categoryNames}
 
-**IMPORTANT — TODAY'S DATE: ${now.toISOString()} (year ${currentYear})**
+	CATEGORY LANGUAGE RULES:
+	- ALWAYS return categoryName in English, regardless of the image language.
+	- Match semantically across languages before creating a category. For example, Russian "авто" must match an existing "Auto" category, and Russian "еда" must match "Food".
+	- If none of the available categories fits well, create a new short descriptive category name in English and set newCategoryEmoji.
+	- Never return Russian, Azerbaijani, or mixed-language category names.
+
+	**IMPORTANT — TODAY'S DATE: ${now.toISOString()} (year ${currentYear})**
 The current Unix timestamp in milliseconds is: ${todayMs}
 You MUST use the year ${currentYear} for all dates. Do NOT use 2024 or any other year unless the image explicitly shows a different year.
 
@@ -605,37 +758,37 @@ For each transaction:
 - type: "expense" for purchases/payments, "income" for deposits/refunds
 - amount: numeric amount (positive number)
 - currency: detect from image (default: ${ctx.user.preferredCurrency || "AZN"})
-- categoryName: best match from available categories
+	- categoryName: best semantic match from available categories, returned in English
 - description: merchant name or meaningful description
 - date: UTC timestamp in milliseconds (MUST be in the year ${currentYear} unless the image shows a specific past date)
 - confidence: "high"/"medium"/"low"
 
-CATEGORY MATCHING RULES (apply these strictly):
-- Hotel minibar, hotel bar, hotel restaurant, room service -> use "Рестораны" (NOT "Жильё")
-- Any food or drink purchase (cafe, coffee, restaurant, bar, minibar, snacks) -> use "Рестораны"
-- Hotel room/accommodation/rent/apartment payment -> use "Жильё"
-- Taxi, uber, bus, metro, train, flight -> use "Транспорт"
-- Cinema, concert, club, entertainment venue -> use "Развлечения"
-- Grocery store, supermarket, food market -> use "Продукты"
-- Pharmacy, doctor, clinic, medicine -> use "Здоровье"
-- Clothing store, shoes, fashion -> use "Одежда"
-- Internet, phone plan, mobile top-up -> use "Связь"
-- Netflix, Spotify, app subscription -> use "Подписки"
-- Gift, present -> use "Подарки"
-- Salary, wage -> use "Зарплата"
-- Freelance work payment -> use "Фриланс"
-- Stock, crypto, investment -> use "Инвестиции"
-- Vet, veterinary, pet care, pet food, pet supplies -> NEW category "Питомцы" with emoji 🐾
-- Beauty salon, haircut, spa, manicure, pedicure, cosmetics -> NEW category "Красота" with emoji 💅
-- Sports, gym, fitness, swimming pool, yoga -> NEW category "Спорт" with emoji 🏋️
-- Education, course, tuition, books, school, university -> NEW category "Образование" with emoji 📚
-- Charity, donation -> NEW category "Благотворительность" with emoji 🤝
-- Car repair, car service, car wash, parking, fuel/gas -> NEW category "Авто" with emoji 🚗
-- Furniture, home goods, home repair, renovation -> NEW category "Дом" with emoji 🏠
-- Anything else that does NOT fit any category above -> create a NEW category with a short descriptive name and an appropriate emoji
+	CATEGORY MATCHING RULES (apply these strictly and return the English name):
+	- Hotel minibar, hotel bar, hotel restaurant, room service -> use "Restaurants" (NOT "Housing")
+	- Any food or drink purchase (cafe, coffee, restaurant, bar, minibar, snacks) -> use "Restaurants"
+	- Hotel room/accommodation/rent/apartment payment -> use "Housing"
+	- Taxi, uber, bus, metro, train, flight -> use "Transport"
+	- Cinema, concert, club, entertainment venue -> use "Entertainment"
+	- Grocery store, supermarket, food market -> use "Food"
+	- Pharmacy, doctor, clinic, medicine -> use "Health"
+	- Clothing store, shoes, fashion -> use "Clothing"
+	- Internet, phone plan, mobile top-up -> use "Communication"
+	- Netflix, Spotify, app subscription -> use "Subscriptions"
+	- Gift, present -> use "Gifts"
+	- Salary, wage -> use "Salary"
+	- Freelance work payment -> use "Freelance"
+	- Stock, crypto, investment -> use "Investments"
+	- Vet, veterinary, pet care, pet food, pet supplies -> NEW category "Pets" with emoji 🐾
+	- Beauty salon, haircut, spa, manicure, pedicure, cosmetics -> NEW category "Beauty" with emoji 💅
+	- Sports, gym, fitness, swimming pool, yoga -> NEW category "Sports" with emoji 🏋️
+	- Education, course, tuition, books, school, university -> use or create "Education" with emoji 📚
+	- Charity, donation -> NEW category "Charity" with emoji 🤝
+	- Car repair, car service, car wash, parking, fuel/gas -> NEW category "Auto" with emoji 🚗
+	- Furniture, home goods, home repair, renovation -> NEW category "Home" with emoji 🏠
+	- Anything else that does NOT fit any category above -> create a NEW category with a short descriptive English name and an appropriate emoji
 
-NEW CATEGORY RULE: If the transaction does NOT match any existing category well, set categoryName to a NEW descriptive name (NOT "Другое") and set newCategoryEmoji to a single appropriate emoji. The system will auto-create this category for the user.
-If the transaction DOES match an existing category, set newCategoryEmoji to empty string "".
+	NEW CATEGORY RULE: If the transaction does NOT match any existing category well, set categoryName to a NEW descriptive English name (NOT "Other") and set newCategoryEmoji to a single appropriate emoji. The system will auto-create this category for the user.
+	If the transaction DOES match an existing category, set newCategoryEmoji to empty string "".
 
 Always return a transactions array, even for a single receipt (array with one item).`,
           },
@@ -674,7 +827,7 @@ Always return a transactions array, even for a single receipt (array with one it
                       type: { type: "string", enum: ["income", "expense"] },
                       amount: { type: "number" },
                       currency: { type: "string" },
-                      categoryName: { type: "string", description: "Best matching category name, OR a new descriptive name if nothing fits" },
+                      categoryName: { type: "string", description: "Best matching English category name, OR a new descriptive English name if nothing fits" },
                       newCategoryEmoji: { type: "string", description: "Single emoji for a new category if categoryName is NOT in the available list. Empty string if using an existing category." },
                       description: { type: "string" },
                       date: { type: "number", description: "UTC timestamp in milliseconds" },
@@ -730,19 +883,15 @@ Always return a transactions array, even for a single receipt (array with one it
         }
       }
 
-      // Resolve categories: find existing or auto-create new ones
-      const findExistingCategoryReceipt = (categoryName: string) => {
-        return (
-          userCategories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase()) ||
-          userCategories.find((c) => c.name.toLowerCase().includes(categoryName.toLowerCase()))
-        );
-      };
+      // Resolve categories: find existing or auto-create new ones by canonical English name
+      const findExistingCategoryReceipt = (categoryName: string) => findCategoryByCanonicalName(userCategories, categoryName);
 
       const autoCreateCategoryReceipt = async (name: string, emoji: string) => {
-        const existing = findExistingCategoryReceipt(name);
+        const canonicalName = normalizeCategoryNameToEnglish(name);
+        const existing = findExistingCategoryReceipt(canonicalName);
         if (existing) return existing;
         const result = await createCategory({
-          name,
+          name: canonicalName,
           icon: emoji || "📦",
           color: "#6366f1",
           type: "both",
@@ -750,7 +899,16 @@ Always return a transactions array, even for a single receipt (array with one it
           userId: ctx.user.id,
         });
         if (!result) return userCategories[userCategories.length - 1];
-        return { id: result.id, name, icon: emoji || "📦", color: "#6366f1" };
+        return {
+          id: result.id,
+          name: canonicalName,
+          icon: emoji || "📦",
+          color: "#6366f1",
+          type: "both" as const,
+          isPreset: false,
+          userId: ctx.user.id,
+          createdAt: new Date(),
+        };
       };
 
       const enrichedTransactions = await Promise.all(parsed.transactions.map(async (tx) => {
@@ -760,7 +918,7 @@ Always return a transactions array, even for a single receipt (array with one it
           cat = await autoCreateCategoryReceipt(tx.categoryName, tx.newCategoryEmoji);
         }
         if (!cat) {
-          cat = userCategories.find((c) => c.name === "Другое") || userCategories[userCategories.length - 1];
+          cat = getFallbackCategory(userCategories);
         }
         return {
           ...tx,

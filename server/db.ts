@@ -188,21 +188,21 @@ export async function seedPresetCategories() {
   if (existing.length > 0) return;
 
   const presets: InsertCategory[] = [
-    { name: "Продукты", icon: "🛒", color: "#22c55e", type: "expense", isPreset: true },
-    { name: "Транспорт", icon: "🚗", color: "#3b82f6", type: "expense", isPreset: true },
-    { name: "Жильё", icon: "🏠", color: "#8b5cf6", type: "expense", isPreset: true },
-    { name: "Развлечения", icon: "🎬", color: "#f59e0b", type: "expense", isPreset: true },
-    { name: "Здоровье", icon: "💊", color: "#ef4444", type: "expense", isPreset: true },
-    { name: "Одежда", icon: "👕", color: "#ec4899", type: "expense", isPreset: true },
-    { name: "Образование", icon: "📚", color: "#06b6d4", type: "expense", isPreset: true },
-    { name: "Рестораны", icon: "🍽️", color: "#f97316", type: "expense", isPreset: true },
-    { name: "Связь", icon: "📱", color: "#6366f1", type: "expense", isPreset: true },
-    { name: "Подписки", icon: "📺", color: "#a855f7", type: "expense", isPreset: true },
-    { name: "Подарки", icon: "🎁", color: "#e11d48", type: "expense", isPreset: true },
-    { name: "Зарплата", icon: "💰", color: "#10b981", type: "income", isPreset: true },
-    { name: "Фриланс", icon: "💻", color: "#14b8a6", type: "income", isPreset: true },
-    { name: "Инвестиции", icon: "📈", color: "#0ea5e9", type: "income", isPreset: true },
-    { name: "Другое", icon: "📦", color: "#78716c", type: "both", isPreset: true },
+    { name: "Food", icon: "🛒", color: "#22c55e", type: "expense", isPreset: true },
+    { name: "Transport", icon: "🚗", color: "#3b82f6", type: "expense", isPreset: true },
+    { name: "Housing", icon: "🏠", color: "#8b5cf6", type: "expense", isPreset: true },
+    { name: "Entertainment", icon: "🎬", color: "#f59e0b", type: "expense", isPreset: true },
+    { name: "Health", icon: "💊", color: "#ef4444", type: "expense", isPreset: true },
+    { name: "Clothing", icon: "👕", color: "#ec4899", type: "expense", isPreset: true },
+    { name: "Education", icon: "📚", color: "#06b6d4", type: "expense", isPreset: true },
+    { name: "Restaurants", icon: "🍽️", color: "#f97316", type: "expense", isPreset: true },
+    { name: "Communication", icon: "📱", color: "#6366f1", type: "expense", isPreset: true },
+    { name: "Subscriptions", icon: "📺", color: "#a855f7", type: "expense", isPreset: true },
+    { name: "Gifts", icon: "🎁", color: "#e11d48", type: "expense", isPreset: true },
+    { name: "Salary", icon: "💰", color: "#10b981", type: "income", isPreset: true },
+    { name: "Freelance", icon: "💻", color: "#14b8a6", type: "income", isPreset: true },
+    { name: "Investments", icon: "📈", color: "#0ea5e9", type: "income", isPreset: true },
+    { name: "Other", icon: "📦", color: "#78716c", type: "both", isPreset: true },
   ];
   await db.insert(categories).values(presets);
 }
