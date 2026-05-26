@@ -374,7 +374,7 @@ export default function Home() {
                   <span>{group.label}</span>
                   {group.dayTotal > 0 && (
                     <span className="text-xs font-medium text-muted-foreground">
-                      \u2212\u20ac{group.dayTotal.toFixed(2)}
+                      {`\u2212${group.dayTotal.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ${userCurrency}`}
                     </span>
                   )}
                 </div>

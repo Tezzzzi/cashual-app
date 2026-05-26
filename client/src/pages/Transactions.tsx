@@ -318,7 +318,7 @@ export default function Transactions() {
                 <span>{group.label}</span>
                 {group.dayTotal > 0 && (
                   <span className="text-xs font-medium text-muted-foreground">
-                    −€{group.dayTotal.toFixed(2)}
+                    {`\u2212${group.dayTotal.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ${userCurrency}`}
                   </span>
                 )}
               </div>
