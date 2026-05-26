@@ -122,7 +122,7 @@ export default function Transactions() {
   // Group transactions by date for date separators — MUST be before any early return (hooks rules)
   const groupedTransactions = useMemo(() => {
     if (!txns) return [];
-    const groups: { date: string; label: string; items: typeof txns }[] = [];
+    const groups: { date: string; label: string; dayTotal: number; items: typeof txns }[] = [];
     let currentDate = "";
 
     for (const t_item of txns) {
@@ -147,9 +147,13 @@ export default function Transactions() {
             year: txDate.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
           });
         }
-        groups.push({ date: dateStr, label, items: [] });
+        groups.push({ date: dateStr, label, dayTotal: 0, items: [] });
       }
       groups[groups.length - 1].items.push(t_item);
+      // Sum up expenses for the day
+      if (t_item.transaction.type === "expense") {
+        groups[groups.length - 1].dayTotal += Number(t_item.transaction.amount) || 0;
+      }
     }
     return groups;
   }, [txns, t]);
@@ -312,6 +316,11 @@ export default function Transactions() {
               {/* Date Separator */}
               <div className="date-separator">
                 <span>{group.label}</span>
+                {group.dayTotal > 0 && (
+                  <span className="text-xs font-medium text-muted-foreground">
+                    −€{group.dayTotal.toFixed(2)}
+                  </span>
+                )}
               </div>
 
               {/* Transactions for this date in a single card */}

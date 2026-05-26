@@ -231,15 +231,7 @@
 
   /* ─── Date Separator ───────────────────────────────────────────────── */
   .date-separator {
-    @apply flex items-center gap-3 py-3 px-1;
-  }
-
-  .date-separator::before,
-  .date-separator::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: rgba(60, 60, 67, 0.08);
+    @apply flex items-center justify-between py-3 px-1;
   }
 
   .date-separator span {
