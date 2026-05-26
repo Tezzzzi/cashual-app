@@ -235,18 +235,18 @@ try {
     await iconConn.execute("UPDATE categories SET icon = '👶' WHERE name = 'Maksud'");
     // Ensure ALL standard categories are preset
     await iconConn.execute("UPDATE categories SET isPreset = true WHERE name IN ('Food', 'Restaurants', 'Transport', 'Auto', 'Housing', 'Entertainment', 'Health', 'Clothing', 'Education', 'Communication', 'Subscriptions', 'Beauty', 'Sports', 'Pets', 'Gifts', 'Salary', 'Freelance', 'Investments', 'Other')");
-    // Make custom categories non-preset
-    await iconConn.execute("UPDATE categories SET isPreset = false WHERE name IN ('Charity', 'Alimony', 'Parents Support', 'Maksud')");
+    // Make custom categories non-preset and ensure they belong to user 9
+    await iconConn.execute("UPDATE categories SET isPreset = false, userId = 9 WHERE name IN ('Charity', 'Alimony', 'Parents Support', 'Maksud')");
     // Create Alimony category if not exists
     const [alimonyRows] = await iconConn.execute("SELECT id FROM categories WHERE name = 'Alimony' LIMIT 1");
     if (alimonyRows.length === 0) {
-      await iconConn.execute("INSERT INTO categories (name, icon, color, type, isPreset) VALUES ('Alimony', '💸', '#ef4444', 'expense', false)");
+      await iconConn.execute("INSERT INTO categories (name, icon, color, type, isPreset, userId) VALUES ('Alimony', '💸', '#ef4444', 'expense', false, 9)");
       console.log('[startup] Created Alimony category');
     }
     // Create Parents Support category if not exists
     const [parentsRows] = await iconConn.execute("SELECT id FROM categories WHERE name = 'Parents Support' LIMIT 1");
     if (parentsRows.length === 0) {
-      await iconConn.execute("INSERT INTO categories (name, icon, color, type, isPreset) VALUES ('Parents Support', '👨\u200d👩\u200d👦', '#8b5cf6', 'expense', false)");
+      await iconConn.execute("INSERT INTO categories (name, icon, color, type, isPreset, userId) VALUES ('Parents Support', '👨\u200d👩\u200d👦', '#8b5cf6', 'expense', false, 9)");
       console.log('[startup] Created Parents Support category');
     }
     console.log('[startup] Category icons updated');
