@@ -233,12 +233,10 @@ try {
     await iconConn.execute("UPDATE categories SET icon = '🚌' WHERE name = 'Transport'");
     await iconConn.execute("UPDATE categories SET icon = '🚗' WHERE name = 'Auto'");
     await iconConn.execute("UPDATE categories SET icon = '👶' WHERE name = 'Maksud'");
-    // Make Charity non-preset (custom)
-    await iconConn.execute("UPDATE categories SET isPreset = false WHERE name = 'Charity'");
-    // Make Alimony, Parents Support, Maksud non-preset (custom for this user)
-    await iconConn.execute("UPDATE categories SET isPreset = false WHERE name IN ('Alimony', 'Parents Support', 'Maksud')");
-    // Ensure Pets is preset
-    await iconConn.execute("UPDATE categories SET isPreset = true WHERE name = 'Pets'");
+    // Ensure ALL standard categories are preset
+    await iconConn.execute("UPDATE categories SET isPreset = true WHERE name IN ('Food', 'Restaurants', 'Transport', 'Auto', 'Housing', 'Entertainment', 'Health', 'Clothing', 'Education', 'Communication', 'Subscriptions', 'Beauty', 'Sports', 'Pets', 'Gifts', 'Salary', 'Freelance', 'Investments', 'Other')");
+    // Make custom categories non-preset
+    await iconConn.execute("UPDATE categories SET isPreset = false WHERE name IN ('Charity', 'Alimony', 'Parents Support', 'Maksud')");
     // Create Alimony category if not exists
     const [alimonyRows] = await iconConn.execute("SELECT id FROM categories WHERE name = 'Alimony' LIMIT 1");
     if (alimonyRows.length === 0) {
