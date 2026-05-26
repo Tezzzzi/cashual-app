@@ -49,6 +49,9 @@ async function startServer() {
   // BUG-04: Gzip/Brotli compression
   app.use(compression());
 
+  // Trust proxy (Railway runs behind a reverse proxy)
+  app.set("trust proxy", 1);
+
   // BUG-01: Rate limiting on auth endpoint
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
