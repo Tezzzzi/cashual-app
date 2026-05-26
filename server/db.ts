@@ -189,7 +189,7 @@ export async function seedPresetCategories() {
 
   const presets: InsertCategory[] = [
     { name: "Food", icon: "🛒", color: "#22c55e", type: "expense", isPreset: true },
-    { name: "Transport", icon: "🚗", color: "#3b82f6", type: "expense", isPreset: true },
+    { name: "Transport", icon: "🚌", color: "#3b82f6", type: "expense", isPreset: true },
     { name: "Housing", icon: "🏠", color: "#8b5cf6", type: "expense", isPreset: true },
     { name: "Entertainment", icon: "🎬", color: "#f59e0b", type: "expense", isPreset: true },
     { name: "Health", icon: "💊", color: "#ef4444", type: "expense", isPreset: true },

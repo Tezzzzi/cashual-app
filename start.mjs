@@ -226,5 +226,19 @@ try {
   console.warn('[startup] Category canonicalization warning (non-fatal):', err.message);
 }
 
+// Fix category icons: Transport = 🚌, Auto = 🚗
+try {
+  if (process.env.DATABASE_URL) {
+    console.log('[startup] Updating category icons (Transport=🚌, Auto=🚗)...');
+    const iconConn = await mysql.createConnection(process.env.DATABASE_URL);
+    await iconConn.execute("UPDATE categories SET icon = '🚌' WHERE name = 'Transport'");
+    await iconConn.execute("UPDATE categories SET icon = '🚗' WHERE name = 'Auto'");
+    console.log('[startup] Category icons updated');
+    await iconConn.end();
+  }
+} catch (err) {
+  console.warn('[startup] Icon update warning (non-fatal):', err.message);
+}
+
 // Now start the actual server
 await import('./dist/index.js');
