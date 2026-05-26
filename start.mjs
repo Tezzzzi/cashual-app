@@ -169,6 +169,7 @@ try {
       { english: 'Pets', aliases: ['Питомцы', 'Питомец'] },
       { english: 'Beauty', aliases: ['Красота'] },
       { english: 'Sports', aliases: ['Спорт'] },
+      { english: 'Electronics', aliases: ['Электроника', 'Техника'] },
       { english: 'Charity', aliases: ['Благотворительность'] },
     ];
 
@@ -234,7 +235,7 @@ try {
     await iconConn.execute("UPDATE categories SET icon = '🚗' WHERE name = 'Auto'");
     await iconConn.execute("UPDATE categories SET icon = '👶' WHERE name = 'Maksud'");
     // Ensure ALL standard categories are preset
-    await iconConn.execute("UPDATE categories SET isPreset = true WHERE name IN ('Food', 'Restaurants', 'Transport', 'Auto', 'Housing', 'Entertainment', 'Health', 'Clothing', 'Education', 'Communication', 'Subscriptions', 'Beauty', 'Sports', 'Pets', 'Gifts', 'Salary', 'Freelance', 'Investments', 'Other')");
+    await iconConn.execute("UPDATE categories SET isPreset = true WHERE name IN ('Food', 'Restaurants', 'Transport', 'Auto', 'Housing', 'Entertainment', 'Health', 'Clothing', 'Education', 'Communication', 'Subscriptions', 'Beauty', 'Sports', 'Pets', 'Electronics', 'Gifts', 'Salary', 'Freelance', 'Investments', 'Other')");
     // Make custom categories non-preset and ensure they belong to user 9
     await iconConn.execute("UPDATE categories SET isPreset = false, userId = 9 WHERE name IN ('Charity', 'Alimony', 'Parents Support', 'Maksud')");
     // Create Alimony category if not exists
@@ -248,6 +249,12 @@ try {
     if (parentsRows.length === 0) {
       await iconConn.execute("INSERT INTO categories (name, icon, color, type, isPreset, userId) VALUES ('Parents Support', '👨\u200d👩\u200d👦', '#8b5cf6', 'expense', false, 9)");
       console.log('[startup] Created Parents Support category');
+    }
+    // Create Electronics category if not exists
+    const [electronicsRows] = await iconConn.execute("SELECT id FROM categories WHERE name = 'Electronics' LIMIT 1");
+    if (electronicsRows.length === 0) {
+      await iconConn.execute("INSERT INTO categories (name, icon, color, type, isPreset) VALUES ('Electronics', '💻', '#475569', 'expense', true)");
+      console.log('[startup] Created Electronics category');
     }
     console.log('[startup] Category icons updated');
     await iconConn.end();

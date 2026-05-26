@@ -202,6 +202,7 @@ export async function seedPresetCategories() {
     { name: "Beauty", icon: "💅", color: "#f472b6", type: "expense", isPreset: true },
     { name: "Sports", icon: "🏋️", color: "#059669", type: "expense", isPreset: true },
     { name: "Pets", icon: "🐾", color: "#d97706", type: "expense", isPreset: true },
+    { name: "Electronics", icon: "💻", color: "#475569", type: "expense", isPreset: true },
     { name: "Gifts", icon: "🎁", color: "#e11d48", type: "expense", isPreset: true },
     { name: "Salary", icon: "💰", color: "#10b981", type: "income", isPreset: true },
     { name: "Freelance", icon: "💻", color: "#14b8a6", type: "income", isPreset: true },

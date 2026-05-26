@@ -139,6 +139,11 @@ const CATEGORY_NAME_ALIASES: Record<string, string> = {
   "home": "Housing",
   "house": "Housing",
   "дом": "Housing",
+  "electronics": "Electronics",
+  "электроника": "Electronics",
+  "техника": "Electronics",
+  "tech": "Electronics",
+  "gadgets": "Electronics",
 };
 
 function categoryAliasKey(name: string) {
@@ -484,6 +489,7 @@ CATEGORY MATCHING RULES (apply these strictly and return the English name):
 - Sports, gym, fitness, swimming pool, yoga → NEW category "Sports" with emoji 🏋️
 - Education, course, tuition, books, school, university → use or create "Education" with emoji 📚
 - Charity, donation → NEW category "Charity" with emoji 🤝
+- Electronics, computer, laptop, phone, TV, appliances, gadgets, audio, video → use "Electronics" with emoji 💻
 - Car repair, car service, car wash, parking, fuel/gas → use "Auto" with emoji 🚗
 - Alimony, child support payment → use "Alimony" with emoji 💸
 - Money sent to parents, family support, helping parents → use "Parents Support" with emoji 👨‍👩‍👦
@@ -785,6 +791,7 @@ For each transaction:
 	- Sports, gym, fitness, swimming pool, yoga -> NEW category "Sports" with emoji 🏋️
 	- Education, course, tuition, books, school, university -> use or create "Education" with emoji 📚
 	- Charity, donation -> NEW category "Charity" with emoji 🤝
+	- Electronics, computer, laptop, phone, TV, appliances, gadgets, audio, video -> use "Electronics" with emoji 💻
 	- Car repair, car service, car wash, parking, fuel/gas -> use "Auto" with emoji 🚗
 	- Alimony, child support payment -> use "Alimony" with emoji 💸
 	- Money sent to parents, family support, helping parents -> use "Parents Support" with emoji 👨‍👩‍👦
