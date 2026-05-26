@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useTelegramAuth } from "@/_core/hooks/useTelegramAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ArrowDownCircle,
   ArrowUpCircle,
   Plus,
   Loader2,
   AlertCircle,
   ScanLine,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 
 import VoiceRecorder from "@/components/VoiceRecorder";
@@ -48,9 +60,89 @@ export default function Home() {
 
   const { data: recentTxns, isLoading: txnsLoading } =
     trpc.transactions.list.useQuery(
-      { limit: 5 },
+      { limit: 10 },
       { enabled: isAuthenticated }
     );
+
+  const [editingTxn, setEditingTxn] = useState<any>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const deleteMutation = trpc.transactions.delete.useMutation({
+    onSuccess: () => {
+      utils.transactions.list.invalidate();
+      utils.reports.summary.invalidate();
+      toast.success(t("transaction_deleted"));
+      setDeletingId(null);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const userCurrency = user?.preferredCurrency || "AZN";
+
+  const groupedRecentTxns = useMemo(() => {
+    if (!recentTxns) return [];
+    const groups: { date: string; label: string; dayTotal: number; items: typeof recentTxns }[] = [];
+    let currentDate = "";
+
+    for (const t_item of recentTxns) {
+      const dateStr = new Date(t_item.transaction.date).toLocaleDateString("ru-RU");
+      if (dateStr !== currentDate) {
+        currentDate = dateStr;
+        const txDate = new Date(t_item.transaction.date);
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        let label: string;
+        if (txDate.toDateString() === today.toDateString()) {
+          label = t("today") || "\u0421\u0435\u0433\u043e\u0434\u043d\u044f";
+        } else if (txDate.toDateString() === yesterday.toDateString()) {
+          label = t("yesterday") || "\u0412\u0447\u0435\u0440\u0430";
+        } else {
+          label = txDate.toLocaleDateString("ru-RU", {
+            day: "numeric",
+            month: "long",
+            year: txDate.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+          });
+        }
+        groups.push({ date: dateStr, label, dayTotal: 0, items: [] });
+      }
+      groups[groups.length - 1].items.push(t_item);
+      if (t_item.transaction.type === "expense") {
+        groups[groups.length - 1].dayTotal += Number(t_item.transaction.amount) || 0;
+      }
+    }
+    return groups;
+  }, [recentTxns, t]);
+
+  const formatAmount = (txn: any) => {
+    const mainAmount = parseFloat(txn.amount).toLocaleString("ru-RU", {
+      minimumFractionDigits: 2,
+    });
+    const sign = txn.type === "income" ? "+" : "-";
+    const origAmount = txn.originalAmount ? parseFloat(txn.originalAmount) : null;
+    const origCurrency = txn.originalCurrency;
+
+    if (origAmount && origCurrency && origCurrency.toUpperCase() !== userCurrency.toUpperCase()) {
+      const origFormatted = origAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 });
+      return (
+        <div className="text-right">
+          <p className={`text-sm font-semibold ${txn.type === "income" ? "text-income" : "text-expense"}`}>
+            {sign}{mainAmount} {userCurrency}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {sign}{origFormatted} {origCurrency}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <p className={`text-sm font-semibold ${txn.type === "income" ? "text-income" : "text-expense"}`}>
+        {sign}{mainAmount}
+      </p>
+    );
+  };
 
   const saveMultiMutation = trpc.voice.saveReceiptTransactions.useMutation({
     onSuccess: (result) => {
@@ -274,58 +366,95 @@ export default function Home() {
               <div key={i} className="h-16 shimmer rounded-2xl" />
             ))}
           </div>
-        ) : recentTxns && recentTxns.length > 0 ? (
-          <div className="tg-card p-3 space-y-1">
-            {recentTxns.map((t_item) => {
-              const isNew = isNewTransaction(t_item.transaction.date);
-              return (
-                <div
-                  key={t_item.transaction.id}
-                  className={`flex items-center gap-4 p-3 rounded-xl transition-all ${
-                    isNew ? "new-transaction bg-primary/[0.03]" : ""
-                  }`}
-                >
-                  <div className="w-11 h-11 rounded-2xl bg-secondary flex items-center justify-center text-lg shrink-0">
-                    {t_item.categoryIcon || "📦"}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium truncate text-foreground">
-                        {t_item.transaction.description || translateCategory(t_item.categoryName || "") || t("transaction_label")}
-                      </p>
-                      {isNew && <span className="new-badge">NEW</span>}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {translateCategory(t_item.categoryName || "")} · {new Date(t_item.transaction.date).toLocaleDateString("ru-RU")}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p
-                      className={`text-sm font-bold ${
-                        t_item.transaction.type === "income"
-                          ? "text-income"
-                          : "text-expense"
-                      }`}
-                    >
-                      {t_item.transaction.type === "income" ? "+" : "-"}
-                      {parseFloat(t_item.transaction.amount).toLocaleString("ru-RU", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </p>
-                    {t_item.transaction.originalCurrency &&
-                      t_item.transaction.originalCurrency !== (user?.preferredCurrency || "AZN") && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {t_item.transaction.type === "income" ? "+" : "-"}
-                        {parseFloat(t_item.transaction.originalAmount || "0").toLocaleString("ru-RU", {
-                          minimumFractionDigits: 2,
-                        })}{" "}
-                        {t_item.transaction.originalCurrency}
-                      </p>
-                    )}
-                  </div>
+        ) : groupedRecentTxns.length > 0 ? (
+          <div className="space-y-2">
+            {groupedRecentTxns.map((group) => (
+              <div key={group.date}>
+                <div className="date-separator">
+                  <span>{group.label}</span>
+                  {group.dayTotal > 0 && (
+                    <span className="text-xs font-medium text-muted-foreground">
+                      \u2212\u20ac{group.dayTotal.toFixed(2)}
+                    </span>
+                  )}
                 </div>
-              );
-            })}
+                <div className="tg-card p-3 space-y-0.5">
+                  {group.items.map((t_item) => {
+                    const isNew = isNewTransaction(t_item.transaction.date);
+                    return (
+                      <div
+                        key={t_item.transaction.id}
+                        className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
+                          isNew ? "new-transaction bg-primary/[0.04]" : ""
+                        }`}
+                      >
+                        <div className="w-11 h-11 rounded-2xl bg-secondary flex items-center justify-center text-lg shrink-0">
+                          {t_item.categoryIcon || "\ud83d\udce6"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium truncate text-foreground">
+                              {t_item.transaction.description || translateCategory(t_item.categoryName || "Other") || t("transaction_label")}
+                            </p>
+                            {isNew && <span className="new-badge">NEW</span>}
+                            {t_item.transaction.isFamily && (
+                              <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full shrink-0 font-medium">
+                                {t("family_badge")}
+                              </span>
+                            )}
+                            {t_item.transaction.isWork && (
+                              <span className="text-[9px] bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded-full shrink-0 font-medium">
+                                {t("work_badge")}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {translateCategory(t_item.categoryName || "")}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <div className="mr-1">
+                            {formatAmount(t_item.transaction)}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-xl hover:bg-secondary"
+                            onClick={() =>
+                              setEditingTxn({
+                                id: t_item.transaction.id,
+                                type: t_item.transaction.type,
+                                amount: t_item.transaction.amount,
+                                currency: t_item.transaction.currency,
+                                categoryId: t_item.transaction.categoryId,
+                                description: t_item.transaction.description,
+                                date: t_item.transaction.date,
+                                isFamily: t_item.transaction.isFamily,
+                                familyGroupId: t_item.transaction.familyGroupId,
+                                isWork: t_item.transaction.isWork,
+                                businessGroupId: t_item.transaction.businessGroupId,
+                                originalAmount: t_item.transaction.originalAmount,
+                                originalCurrency: t_item.transaction.originalCurrency,
+                              })
+                            }
+                          >
+                            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-xl hover:bg-destructive/10"
+                            onClick={() => setDeletingId(t_item.transaction.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="tg-card text-center py-12">
@@ -409,6 +538,52 @@ export default function Home() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Edit Transaction Dialog */}
+      <Dialog open={!!editingTxn} onOpenChange={() => setEditingTxn(null)}>
+        <DialogContent className="max-w-md mx-auto max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t("edit")}</DialogTitle>
+          </DialogHeader>
+          {editingTxn && (
+            <TransactionForm
+              initialData={editingTxn}
+              onSuccess={() => setEditingTxn(null)}
+              onCancel={() => setEditingTxn(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog
+        open={!!deletingId}
+        onOpenChange={() => setDeletingId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("confirm_delete")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("confirm_delete_desc")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground"
+              onClick={() => {
+                if (deletingId) deleteMutation.mutate({ id: deletingId });
+              }}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                t("delete_confirm")
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
