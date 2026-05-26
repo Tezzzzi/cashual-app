@@ -150,7 +150,7 @@ try {
     console.log('[startup] Canonicalizing category names to English and merging localized duplicates...');
     const categoryConn = await mysql.createConnection(process.env.DATABASE_URL);
     const categoryGroups = [
-      { english: 'Food', aliases: ['Продукты', 'Еда', 'Питание', 'Groceries'] },
+      { english: 'Food', aliases: ['Продукты', 'Еда', 'Питание', 'Groceries', 'Напитки', 'Drinks', 'Beverages'] },
       { english: 'Transport', aliases: ['Транспорт'] },
       { english: 'Housing', aliases: ['Жильё', 'Жилье', 'Аренда'] },
       { english: 'Entertainment', aliases: ['Развлечения'] },
