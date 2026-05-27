@@ -153,6 +153,8 @@ const translations = {
     default_budget_personal: "Личный",
     default_budget_family: "Семейный",
     default_budget_desc: "Какой бюджет выбирать по умолчанию при добавлении транзакции",
+    reminders: "Напоминания",
+    reminders_desc: "Вечернее напоминание и утренний итог расходов в Telegram",
 
     // Family scope in reports
     scope_personal: "Мои",
@@ -408,6 +410,8 @@ const translations = {
     default_budget_personal: "Şəxsi",
     default_budget_family: "Ailə",
     default_budget_desc: "Əməliyyat əlavə edərkən hansı büdcəni standart seçmək",
+    reminders: "Xatırlatmalar",
+    reminders_desc: "Telegram-da axşam xatırlatması və səhər xərc xülasəsi",
 
     // Family scope in reports
     scope_personal: "Mənim",
@@ -663,6 +667,8 @@ const translations = {
     default_budget_personal: "Personal",
     default_budget_family: "Family",
     default_budget_desc: "Which budget to select by default when adding a transaction",
+    reminders: "Reminders",
+    reminders_desc: "Evening reminder and morning spending summary in Telegram",
 
     // Family scope in reports
     scope_personal: "Mine",

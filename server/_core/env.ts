@@ -1,7 +1,7 @@
 // For Railway deployment, these are the required environment variables:
 // - DATABASE_URL: MySQL connection string
 // - JWT_SECRET: Session signing secret
-// - TELEGRAM_BOT_TOKEN: Telegram bot token from BotFather
+// - TELEGRAM_BOT_TOKEN or BOT_TOKEN: Telegram bot token from BotFather
 // - OPENAI_API_KEY: OpenAI API key for Whisper and GPT
 // - NODE_ENV: "production" or "development"
 
@@ -15,6 +15,6 @@ export const ENV = {
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   // Telegram & OpenAI
-  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? process.env.BOT_TOKEN ?? "",
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
 };

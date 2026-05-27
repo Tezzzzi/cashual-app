@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -42,6 +43,7 @@ import {
   Send,
   Eye,
   AlertTriangle,
+  Bell,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage, type Lang } from "@/contexts/LanguageContext";
@@ -108,6 +110,24 @@ export default function Settings() {
   const exportCsv = trpc.reports.exportCsv.useMutation();
   const sendCsvToTelegram = trpc.reports.sendCsvToTelegram.useMutation();
   const deleteAllData = trpc.settings.deleteAllData.useMutation();
+
+  useEffect(() => {
+    if (!isAuthenticated || !user || user.timezone) return;
+    const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (detectedTimeZone) {
+      updateSettings.mutate({ timezone: detectedTimeZone });
+    }
+    // Store timezone only once when it is missing, without re-running for mutation identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user?.id, user?.timezone]);
+
+  const handleRemindersToggle = (checked: boolean) => {
+    const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    updateSettings.mutate({
+      remindersEnabled: checked,
+      timezone: user?.timezone || detectedTimeZone || undefined,
+    });
+  };
 
   if (!isAuthenticated) {
     return (
@@ -304,6 +324,25 @@ export default function Settings() {
             <SelectItem value="KZT">KZT — Тенге</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Reminders */}
+      <div className="tg-card space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <span className="text-sm font-medium">{t("reminders")}</span>
+              <p className="text-[10px] text-muted-foreground">{t("reminders_desc")}</p>
+            </div>
+          </div>
+          <Switch
+            checked={user?.remindersEnabled ?? true}
+            onCheckedChange={handleRemindersToggle}
+            disabled={updateSettings.isPending}
+            aria-label={t("reminders")}
+          />
+        </div>
       </div>
 
       {/* Default Budget */}

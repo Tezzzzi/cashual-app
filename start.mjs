@@ -57,10 +57,29 @@ try {
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'transactions' AND COLUMN_NAME = 'originalAmount'`
     );
     if (origAmtCols.length === 0) {
-      await migConn.execute(`ALTER TABLE \`transactions\` ADD \`originalAmount\` decimal(12,2) DEFAULT NULL`);
-      await migConn.execute(`ALTER TABLE \`transactions\` ADD \`originalCurrency\` varchar(10) DEFAULT NULL`);
-      await migConn.execute(`ALTER TABLE \`transactions\` ADD \`exchangeRate\` decimal(16,8) DEFAULT NULL`);
+      await migConn.execute("ALTER TABLE `transactions` ADD `originalAmount` decimal(12,2) DEFAULT NULL");
+      await migConn.execute("ALTER TABLE `transactions` ADD `originalCurrency` varchar(10) DEFAULT NULL");
+      await migConn.execute("ALTER TABLE `transactions` ADD `exchangeRate` decimal(16,8) DEFAULT NULL");
       console.log('[startup] Added multi-currency columns (originalAmount, originalCurrency, exchangeRate)');
+    }
+
+    // Migration 0005: Reminder preferences and user timezone
+    const [reminderCols] = await migConn.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'remindersEnabled'`
+    );
+    if (reminderCols.length === 0) {
+      await migConn.execute("ALTER TABLE `users` ADD `remindersEnabled` boolean NOT NULL DEFAULT true");
+      console.log('[startup] Added remindersEnabled column to users');
+    }
+
+    const [timezoneCols] = await migConn.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'timezone'`
+    );
+    if (timezoneCols.length === 0) {
+      await migConn.execute("ALTER TABLE `users` ADD `timezone` varchar(64) DEFAULT NULL");
+      console.log('[startup] Added timezone column to users');
     }
 
     await migConn.end();

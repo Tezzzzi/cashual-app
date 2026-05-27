@@ -29,6 +29,20 @@
       "when": 1745100000000,
       "tag": "0003_add_iswork_field",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1745200000000,
+      "tag": "0004_add_multicurrency",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1780000000000,
+      "tag": "0005_add_reminders",
+      "breakpoints": true
     }
   ]
 }

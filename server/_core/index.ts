@@ -10,6 +10,7 @@ import { registerTelegramRoutes } from "./telegram-routes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic } from "./static";
+import { startReminderScheduler } from "../reminders";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -131,6 +132,7 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    startReminderScheduler();
   });
 }
 

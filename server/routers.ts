@@ -1395,16 +1395,41 @@ const familyRouter = router({
 });
 
 // ─── User Settings Router ────────────────────────────────────────────
+function isValidTimeZoneName(timeZone: string) {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const settingsRouter = router({
+  current: protectedProcedure.query(async ({ ctx }) => {
+    return {
+      preferredLanguage: ctx.user.preferredLanguage || "en",
+      preferredCurrency: ctx.user.preferredCurrency || "AZN",
+      defaultBudget: ctx.user.defaultBudget || "personal",
+      remindersEnabled: ctx.user.remindersEnabled ?? true,
+      timezone: ctx.user.timezone || null,
+    };
+  }),
+
   update: protectedProcedure
     .input(
       z.object({
         preferredLanguage: z.string().optional(),
         preferredCurrency: z.string().optional(),
         defaultBudget: z.enum(["personal", "family"]).optional(),
+        remindersEnabled: z.boolean().optional(),
+        timezone: z.string().min(1).max(64).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      if (input.timezone && !isValidTimeZoneName(input.timezone)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid time zone" });
+      }
+
       await updateUserTelegram(ctx.user.id, input);
       return { success: true };
     }),
