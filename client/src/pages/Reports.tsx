@@ -29,6 +29,7 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
+  LabelList,
   BarChart,
   Bar,
   XAxis,
@@ -661,20 +662,7 @@ export default function Reports() {
                           axisLine={false}
                           tick={{ fontSize: 10, fill: "#94a3b8" }}
                         />
-                        <Tooltip
-                          cursor={{ fill: "rgba(148, 163, 184, 0.08)" }}
-                          contentStyle={{
-                            background: "oklch(0.18 0.015 265)",
-                            border: "none",
-                            borderRadius: "8px",
-                            color: "#fff",
-                            fontSize: "12px",
-                          }}
-                          formatter={(value: number, name: string) => [
-                            formatMoney(Number(value)),
-                            name === "thisMonth" ? t("this_month") : t("last_month"),
-                          ]}
-                        />
+
                         <Bar
                           dataKey="lastMonth"
                           name={t("last_month")}
@@ -700,6 +688,12 @@ export default function Reports() {
                               }
                             />
                           ))}
+                          <LabelList
+                            dataKey="changeLabel"
+                            position="right"
+                            style={{ fontSize: 9, fontWeight: 600 }}
+                            fill="#94a3b8"
+                          />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
