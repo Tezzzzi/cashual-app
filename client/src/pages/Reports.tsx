@@ -9,6 +9,7 @@ import {
   ArrowDownCircle,
   Wallet,
   TrendingUp,
+  TrendingDown,
   Users,
   Briefcase,
   Send,
@@ -28,6 +29,11 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
 } from "recharts";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -35,6 +41,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 type Period = "week" | "month" | "year" | "all";
 type Scope = "mine" | "partner" | "all";
 type BudgetFilter = "all" | "personal" | "family" | "work";
+type TrendDirection = "increased" | "decreased" | "unchanged";
 
 function getPeriodRange(period: Period): { startDate?: number; endDate?: number } {
   if (period === "all") return {};
@@ -57,6 +64,40 @@ function getPeriodRange(period: Period): { startDate?: number; endDate?: number 
   return { startDate: startMs, endDate: now };
 }
 
+function getMonthComparisonRanges() {
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  return {
+    current: {
+      startDate: currentMonthStart.getTime(),
+      endDate: Math.min(now.getTime(), nextMonthStart.getTime() - 1),
+    },
+    previous: {
+      startDate: previousMonthStart.getTime(),
+      endDate: currentMonthStart.getTime() - 1,
+    },
+  };
+}
+
+function getPercentChange(current: number, previous: number) {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return ((current - previous) / previous) * 100;
+}
+
+function formatPercentChange(value: number) {
+  const rounded = Math.round(value);
+  return `${rounded > 0 ? "+" : ""}${rounded}%`;
+}
+
+function getTrendDirection(current: number, previous: number): TrendDirection {
+  if (current > previous) return "increased";
+  if (current < previous) return "decreased";
+  return "unchanged";
+}
+
 export default function Reports() {
   const { isAuthenticated } = useAuth();
   const { t, translateCategory } = useLanguage();
@@ -67,6 +108,18 @@ export default function Reports() {
   const [businessGroupFilter, setBusinessGroupFilter] = useState<string>("all");
   const [showCsvMenu, setShowCsvMenu] = useState(false);
   const [csvPreview, setCsvPreview] = useState<{ csv: string; filename: string } | null>(null);
+
+  // Fetch current user for preferredCurrency
+  const { data: currentUser } = trpc.auth.me.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const userCurrency = currentUser?.preferredCurrency || "AZN";
+
+  const formatMoney = (value: number) =>
+    `${value.toLocaleString("ru-RU", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    })} ${userCurrency}`;
 
   // Fetch family groups to determine if user has a family
   const { data: familyGroups } = trpc.family.myGroups.useQuery(undefined, {
@@ -82,6 +135,7 @@ export default function Reports() {
   const hasBusiness = (businessGroups?.length ?? 0) > 0;
 
   const range = useMemo(() => getPeriodRange(period), [period]);
+  const monthRanges = useMemo(() => getMonthComparisonRanges(), []);
 
   // Build query params — include familyGroupId and scope only when viewing family reports
   const summaryParams = useMemo(() => {
@@ -110,11 +164,56 @@ export default function Reports() {
     return base;
   }, [range, reportType, hasFamily, scope, familyGroupId, budgetFilter, businessGroupFilter]);
 
+  const trendBaseParams = useMemo(() => {
+    const base: Record<string, any> = {};
+    if (budgetFilter === "work") {
+      base.isWork = true;
+      if (businessGroupFilter !== "all") base.businessGroupId = parseInt(businessGroupFilter);
+    } else if (budgetFilter === "family" && hasFamily && scope !== "mine") {
+      return { ...base, familyGroupId, scope };
+    } else if (budgetFilter === "all" && hasFamily && scope !== "mine") {
+      return { ...base, familyGroupId, scope };
+    }
+    return base;
+  }, [hasFamily, scope, familyGroupId, budgetFilter, businessGroupFilter]);
+
+  const currentMonthParams = useMemo(
+    () => ({ ...trendBaseParams, ...monthRanges.current }),
+    [trendBaseParams, monthRanges]
+  );
+
+  const previousMonthParams = useMemo(
+    () => ({ ...trendBaseParams, ...monthRanges.previous }),
+    [trendBaseParams, monthRanges]
+  );
+
+  const currentMonthCategoryParams = useMemo(
+    () => ({ ...currentMonthParams, type: "expense" as const }),
+    [currentMonthParams]
+  );
+
+  const previousMonthCategoryParams = useMemo(
+    () => ({ ...previousMonthParams, type: "expense" as const }),
+    [previousMonthParams]
+  );
+
   const { data: summary, isLoading: summaryLoading } =
     trpc.reports.summary.useQuery(summaryParams, { enabled: isAuthenticated });
 
   const { data: byCategory, isLoading: catLoading } =
     trpc.reports.byCategory.useQuery(byCategoryParams, { enabled: isAuthenticated });
+
+  const { data: currentMonthSummary, isLoading: currentMonthSummaryLoading } =
+    trpc.reports.summary.useQuery(currentMonthParams, { enabled: isAuthenticated });
+
+  const { data: previousMonthSummary, isLoading: previousMonthSummaryLoading } =
+    trpc.reports.summary.useQuery(previousMonthParams, { enabled: isAuthenticated });
+
+  const { data: currentMonthCategories, isLoading: currentMonthCategoriesLoading } =
+    trpc.reports.byCategory.useQuery(currentMonthCategoryParams, { enabled: isAuthenticated });
+
+  const { data: previousMonthCategories, isLoading: previousMonthCategoriesLoading } =
+    trpc.reports.byCategory.useQuery(previousMonthCategoryParams, { enabled: isAuthenticated });
 
   const exportCsv = trpc.reports.exportCsv.useMutation({
     onSuccess: (data) => {
@@ -192,6 +291,81 @@ export default function Reports() {
     () => pieData.reduce((sum, d) => sum + d.value, 0),
     [pieData]
   );
+
+  const currentMonthExpenseTotal = Number(currentMonthSummary?.totalExpense ?? 0);
+  const previousMonthExpenseTotal = Number(previousMonthSummary?.totalExpense ?? 0);
+  const totalExpenseTrend = getTrendDirection(currentMonthExpenseTotal, previousMonthExpenseTotal);
+  const totalExpenseChange = getPercentChange(currentMonthExpenseTotal, previousMonthExpenseTotal);
+  const totalExpenseTrendClass =
+    totalExpenseTrend === "increased"
+      ? "text-red-500"
+      : totalExpenseTrend === "decreased"
+        ? "text-green-500"
+        : "text-muted-foreground";
+  const trendsLoading =
+    currentMonthSummaryLoading ||
+    previousMonthSummaryLoading ||
+    currentMonthCategoriesLoading ||
+    previousMonthCategoriesLoading;
+
+  const trendData = useMemo(() => {
+    const categories = new Map<
+      string,
+      {
+        categoryName: string;
+        categoryIcon: string;
+        categoryColor: string;
+        thisMonth: number;
+        lastMonth: number;
+      }
+    >();
+
+    const ensureCategory = (categoryName?: string | null) => {
+      const key = categoryName || "Other";
+      if (!categories.has(key)) {
+        categories.set(key, {
+          categoryName: key,
+          categoryIcon: "📦",
+          categoryColor: "#6366f1",
+          thisMonth: 0,
+          lastMonth: 0,
+        });
+      }
+      return categories.get(key)!;
+    };
+
+    currentMonthCategories?.forEach((c) => {
+      const entry = ensureCategory(c.categoryName);
+      entry.categoryIcon = c.categoryIcon || entry.categoryIcon;
+      entry.categoryColor = c.categoryColor || entry.categoryColor;
+      entry.thisMonth = Number(c.total || 0);
+    });
+
+    previousMonthCategories?.forEach((c) => {
+      const entry = ensureCategory(c.categoryName);
+      entry.categoryIcon = c.categoryIcon || entry.categoryIcon;
+      entry.categoryColor = c.categoryColor || entry.categoryColor;
+      entry.lastMonth = Number(c.total || 0);
+    });
+
+    return Array.from(categories.values())
+      .map((entry) => {
+        const name = translateCategory(entry.categoryName);
+        const changePercent = getPercentChange(entry.thisMonth, entry.lastMonth);
+        const trend = getTrendDirection(entry.thisMonth, entry.lastMonth);
+        return {
+          ...entry,
+          name,
+          shortName: `${entry.categoryIcon} ${name.length > 12 ? `${name.slice(0, 12)}…` : name}`,
+          total: entry.thisMonth + entry.lastMonth,
+          changePercent,
+          changeLabel: formatPercentChange(changePercent),
+          trend,
+        };
+      })
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 7);
+  }, [currentMonthCategories, previousMonthCategories, translateCategory]);
 
   if (!isAuthenticated) {
     return (
@@ -409,6 +583,167 @@ export default function Reports() {
                 })}
           </p>
         </div>
+      </div>
+
+      {/* Trends */}
+      <div className="tg-card space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">{t("trends")}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {t("this_month_vs_last_month")}
+            </p>
+          </div>
+          <div className={`flex items-center gap-1 text-sm font-bold ${totalExpenseTrendClass}`}>
+            {trendsLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                {totalExpenseTrend === "increased" ? (
+                  <TrendingUp className="h-4 w-4" />
+                ) : totalExpenseTrend === "decreased" ? (
+                  <TrendingDown className="h-4 w-4" />
+                ) : null}
+                {formatPercentChange(totalExpenseChange)}
+              </>
+            )}
+          </div>
+        </div>
+
+        {trendsLoading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-border/70 bg-background/40 p-3">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {t("this_month")}
+                </p>
+                <p className="mt-1 text-lg font-bold text-expense">
+                  {formatMoney(currentMonthExpenseTotal)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-background/40 p-3">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {t("last_month")}
+                </p>
+                <p className="mt-1 text-lg font-bold">
+                  {formatMoney(previousMonthExpenseTotal)}
+                </p>
+              </div>
+            </div>
+
+            {trendData.length > 0 ? (
+              <>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    {t("top_spending_categories")}
+                  </p>
+                  <div
+                    className="-mx-2"
+                    style={{ height: Math.max(220, trendData.length * 42) }}
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={trendData}
+                        layout="vertical"
+                        margin={{ top: 4, right: 12, left: 6, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(148, 163, 184, 0.18)" />
+                        <XAxis type="number" hide />
+                        <YAxis
+                          type="category"
+                          dataKey="shortName"
+                          width={92}
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        />
+                        <Tooltip
+                          cursor={{ fill: "rgba(148, 163, 184, 0.08)" }}
+                          contentStyle={{
+                            background: "oklch(0.18 0.015 265)",
+                            border: "none",
+                            borderRadius: "8px",
+                            color: "#fff",
+                            fontSize: "12px",
+                          }}
+                          formatter={(value: number, name: string) => [
+                            formatMoney(Number(value)),
+                            name === "thisMonth" ? t("this_month") : t("last_month"),
+                          ]}
+                        />
+                        <Bar
+                          dataKey="lastMonth"
+                          name={t("last_month")}
+                          fill="#94a3b8"
+                          radius={[0, 5, 5, 0]}
+                          barSize={8}
+                        />
+                        <Bar
+                          dataKey="thisMonth"
+                          name={t("this_month")}
+                          radius={[0, 5, 5, 0]}
+                          barSize={8}
+                        >
+                          {trendData.map((entry, index) => (
+                            <Cell
+                              key={`trend-cell-${index}`}
+                              fill={
+                                entry.trend === "increased"
+                                  ? "#ef4444"
+                                  : entry.trend === "decreased"
+                                    ? "#22c55e"
+                                    : entry.categoryColor
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {trendData.map((item) => {
+                    const trendClass =
+                      item.trend === "increased"
+                        ? "text-red-500"
+                        : item.trend === "decreased"
+                          ? "text-green-500"
+                          : "text-muted-foreground";
+
+                    return (
+                      <div
+                        key={item.categoryName}
+                        className="flex items-center justify-between gap-3 rounded-lg bg-background/35 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium">
+                            {item.categoryIcon} {item.name}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {formatMoney(item.thisMonth)} / {formatMoney(item.lastMonth)}
+                          </p>
+                        </div>
+                        <span className={`shrink-0 text-xs font-bold ${trendClass}`}>
+                          {item.changeLabel}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-border py-8 text-center">
+                <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">{t("no_trend_data")}</p>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Type Toggle */}

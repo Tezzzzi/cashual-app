@@ -84,6 +84,12 @@ const translations = {
     csv_sent_telegram: "CSV отправлен в Telegram!",
     csv_downloaded: "CSV скачан",
     csv_rows: "записей",
+    trends: "Тренды",
+    this_month: "Этот месяц",
+    last_month: "Прошлый месяц",
+    this_month_vs_last_month: "Этот месяц по сравнению с прошлым",
+    top_spending_categories: "Топ категорий расходов",
+    no_trend_data: "Нет данных о расходах за этот или прошлый месяц",
 
     // Family
     family_title: "Семейный бюджет",
@@ -333,6 +339,12 @@ const translations = {
     csv_sent_telegram: "CSV Telegram-a göndərildi!",
     csv_downloaded: "CSV yükləndi",
     csv_rows: "qeyd",
+    trends: "Trendlər",
+    this_month: "Bu ay",
+    last_month: "Keçən ay",
+    this_month_vs_last_month: "Bu ay keçən ayla müqayisədə",
+    top_spending_categories: "Ən çox xərclənən kateqoriyalar",
+    no_trend_data: "Bu və ya keçən ay üçün xərc məlumatı yoxdur",
 
     // Family
     family_title: "Ailə büdcəsi",
@@ -582,6 +594,12 @@ const translations = {
     csv_sent_telegram: "CSV sent to Telegram!",
     csv_downloaded: "CSV downloaded",
     csv_rows: "rows",
+    trends: "Trends",
+    this_month: "This Month",
+    last_month: "Last Month",
+    this_month_vs_last_month: "This month compared with last month",
+    top_spending_categories: "Top spending categories",
+    no_trend_data: "No expense data for this or last month",
 
     // Family
     family_title: "Family Budget",
