@@ -15,6 +15,28 @@ import { ArrowDownCircle, ArrowUpCircle, Loader2, ArrowRight } from "lucide-reac
 import { useLanguage } from "@/contexts/LanguageContext";
 
 const SUPPORTED_CURRENCIES = ["AZN", "RUB", "USD", "EUR", "TRY", "GEL", "GBP", "CHF", "PLN", "CZK", "SEK", "NOK"];
+const LAST_CURRENCY_STORAGE_KEY = "cashual_last_currency";
+
+const getLastUsedCurrency = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const storedCurrency = window.localStorage.getItem(LAST_CURRENCY_STORAGE_KEY);
+    if (!storedCurrency) return null;
+    const normalizedCurrency = storedCurrency.toUpperCase();
+    return SUPPORTED_CURRENCIES.includes(normalizedCurrency) ? normalizedCurrency : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveLastUsedCurrency = (currency: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(LAST_CURRENCY_STORAGE_KEY, currency.toUpperCase());
+  } catch {
+    // Ignore storage failures so transaction submission is never blocked.
+  }
+};
 
 type TransactionFormProps = {
   initialData?: {
@@ -55,8 +77,9 @@ export default function TransactionForm({
     return initialData?.amount?.toString() || "";
   });
   const [currency, setCurrency] = useState(() => {
-    if (initialData?.originalCurrency) return initialData.originalCurrency;
-    return initialData?.currency || "AZN";
+    if (isEditing && initialData?.originalCurrency) return initialData.originalCurrency;
+    if (isEditing && initialData?.currency) return initialData.currency;
+    return getLastUsedCurrency() || "AZN";
   });
   const hasUserChangedCurrencyRef = useRef(false);
   const [categoryId, setCategoryId] = useState<string>(
@@ -92,13 +115,19 @@ export default function TransactionForm({
   const isDifferentCurrency = currency.toUpperCase() !== userCurrency.toUpperCase();
 
   useEffect(() => {
+    if (isEditing || hasUserChangedCurrencyRef.current) return;
+
+    const lastUsedCurrency = getLastUsedCurrency();
+    if (lastUsedCurrency) {
+      setCurrency(lastUsedCurrency);
+      return;
+    }
+
     const preferredCurrency = currentUser?.preferredCurrency;
-    const hasInitialCurrency = Boolean(initialData?.currency || initialData?.originalCurrency);
-
-    if (!preferredCurrency || hasInitialCurrency || hasUserChangedCurrencyRef.current) return;
-
-    setCurrency(preferredCurrency);
-  }, [currentUser?.preferredCurrency, initialData?.currency, initialData?.originalCurrency]);
+    if (preferredCurrency) {
+      setCurrency(preferredCurrency);
+    }
+  }, [currentUser?.preferredCurrency, isEditing]);
 
   // Once familyGroups and user settings load, apply the default budget preference
   useEffect(() => {
@@ -187,6 +216,7 @@ export default function TransactionForm({
         businessGroupId: isWork && businessGroupId ? parseInt(businessGroupId) : null,
       });
     } else {
+      saveLastUsedCurrency(currency);
       createMutation.mutate({
         type,
         amount,
