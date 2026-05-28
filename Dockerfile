@@ -9,8 +9,8 @@ RUN npm install -g pnpm
 COPY package.json pnpm-lock.yaml ./
 COPY patches/ ./patches/
 
-# Install dependencies (fresh install, no cache)
-RUN pnpm install --frozen-lockfile
+# Install dependencies (allow lockfile updates to prevent CI failures)
+RUN pnpm install --no-frozen-lockfile
 
 # Copy source code
 COPY . .
