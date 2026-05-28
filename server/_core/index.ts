@@ -11,6 +11,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic } from "./static";
 import { startReminderScheduler } from "../reminders";
+import { registerBackupRoute, startDailyBackupScheduler } from "../backup";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -105,6 +106,9 @@ async function startServer() {
   // Telegram authentication routes
   registerTelegramRoutes(app);
 
+  // Admin SQL backup download route
+  registerBackupRoute(app);
+
   // tRPC API
   app.use(
     "/api/trpc",
@@ -133,6 +137,7 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
     startReminderScheduler();
+    startDailyBackupScheduler();
   });
 }
 
