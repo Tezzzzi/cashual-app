@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -44,9 +44,11 @@ import {
   Eye,
   AlertTriangle,
   Bell,
+  Camera,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage, type Lang } from "@/contexts/LanguageContext";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const EMOJI_OPTIONS = [
   "🛒", "🚗", "🏠", "🎬", "💊", "👕", "📚", "🍽️", "📱", "📺",
@@ -66,6 +68,10 @@ export default function Settings() {
   const [newCatIcon, setNewCatIcon] = useState("📦");
   const [newCatColor, setNewCatColor] = useState("#6366f1");
   const [newCatType, setNewCatType] = useState<"income" | "expense" | "both">("both");
+  const [profileName, setProfileName] = useState("");
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+  const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   // Delete all data flow
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -120,6 +126,69 @@ export default function Settings() {
     // Store timezone only once when it is missing, without re-running for mutation identity changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user?.id, user?.timezone]);
+
+  useEffect(() => {
+    if (!user) return;
+    setProfileName(user.customDisplayName || user.telegramFirstName || user.name || "");
+    setProfileAvatar(user.customAvatarUrl || null);
+  }, [user?.id, user?.customDisplayName, user?.customAvatarUrl, user?.telegramFirstName, user?.name]);
+
+  const resizeAvatarToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Failed to read avatar image"));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("Failed to load avatar image"));
+        img.onload = () => {
+          const maxSize = 200;
+          const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
+          const width = Math.max(1, Math.round(img.width * scale));
+          const height = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Canvas is not supported"));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        img.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+
+  const handleAvatarChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error(t("profile_avatar_invalid"));
+      return;
+    }
+    setIsProcessingAvatar(true);
+    try {
+      const resized = await resizeAvatarToBase64(file);
+      setProfileAvatar(resized);
+    } catch (err: any) {
+      toast.error(err?.message || t("profile_avatar_invalid"));
+    } finally {
+      setIsProcessingAvatar(false);
+      event.target.value = "";
+    }
+  };
+
+  const displayAvatar = profileAvatar || user?.telegramPhotoUrl || null;
+
+  const handleSaveProfile = () => {
+    const trimmedName = profileName.trim();
+    updateSettings.mutate({
+      customDisplayName: trimmedName || null,
+      customAvatarUrl: profileAvatar || null,
+    });
+  };
 
   const handleRemindersToggle = (checked: boolean) => {
     const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -262,18 +331,56 @@ export default function Settings() {
       {/* Header */}
       <h1 className="text-2xl font-bold tracking-tight">{t("settings_title")}</h1>
 
-      {/* User Info */}
-      <div className="tg-card flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-primary/8 flex items-center justify-center text-lg font-bold">
-          {(user?.telegramFirstName || user?.name || "U")[0]}
+      {/* Profile */}
+      <div className="tg-card space-y-4">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            className="relative shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            onClick={() => avatarInputRef.current?.click()}
+            aria-label={t("profile_change_avatar")}
+          >
+            <Avatar className="h-16 w-16 border border-border/60 shadow-sm">
+              {displayAvatar ? <AvatarImage src={displayAvatar} alt={profileName || t("user_fallback")} /> : null}
+              <AvatarFallback className="bg-primary/10 text-lg font-bold">
+                {(profileName || user?.telegramFirstName || user?.name || "U")[0]?.toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md">
+              {isProcessingAvatar ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+            </span>
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">{t("profile_section_title")}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {user?.email || user?.telegramUsername || ""}
+            </p>
+          </div>
         </div>
-        <div className="flex-1">
-          <p className="text-sm font-semibold">
-            {user?.telegramFirstName || user?.name || t("user_fallback")}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {user?.email || user?.telegramUsername || ""}
-          </p>
+
+        <input
+          ref={avatarInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleAvatarChange}
+        />
+
+        <div className="space-y-2">
+          <Input
+            value={profileName}
+            onChange={(event) => setProfileName(event.target.value)}
+            placeholder={t("profile_name_placeholder")}
+            maxLength={128}
+          />
+          <Button
+            className="w-full"
+            onClick={handleSaveProfile}
+            disabled={updateSettings.isPending || isProcessingAvatar}
+          >
+            {updateSettings.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {t("profile_save")}
+          </Button>
         </div>
       </div>
 

@@ -116,6 +116,11 @@ const translations = {
 
     // Settings
     settings_title: "Настройки",
+    profile_section_title: "Профиль",
+    profile_name_placeholder: "Ваше имя",
+    profile_save: "Сохранить профиль",
+    profile_change_avatar: "Изменить фото профиля",
+    profile_avatar_invalid: "Выберите корректное изображение",
     interface_language: "Язык интерфейса",
     default_currency: "Валюта по умолчанию",
     categories: "Категории",
@@ -373,6 +378,11 @@ const translations = {
 
     // Settings
     settings_title: "Parametrlər",
+    profile_section_title: "Profil",
+    profile_name_placeholder: "Adınız",
+    profile_save: "Profili saxla",
+    profile_change_avatar: "Profil şəklini dəyiş",
+    profile_avatar_invalid: "Düzgün şəkil seçin",
     interface_language: "İnterfeys dili",
     default_currency: "Standart valyuta",
     categories: "Kateqoriyalar",
@@ -630,6 +640,11 @@ const translations = {
 
     // Settings
     settings_title: "Settings",
+    profile_section_title: "Profile",
+    profile_name_placeholder: "Your name",
+    profile_save: "Save profile",
+    profile_change_avatar: "Change profile photo",
+    profile_avatar_invalid: "Choose a valid image",
     interface_language: "Interface Language",
     default_currency: "Default Currency",
     categories: "Categories",

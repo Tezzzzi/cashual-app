@@ -266,7 +266,7 @@ const transactionsRouter = router({
         categoryId: z.number(),
         type: z.enum(["income", "expense"]),
         amount: z.string(),
-        currency: z.string().default("AZN"),
+        currency: z.string().optional(),
         description: z.string().optional(),
         date: z.number(),
         isFamily: z.boolean().default(false),
@@ -1423,11 +1423,16 @@ const settingsRouter = router({
         defaultBudget: z.enum(["personal", "family"]).optional(),
         remindersEnabled: z.boolean().optional(),
         timezone: z.string().min(1).max(64).nullable().optional(),
+        customDisplayName: z.string().trim().min(1).max(128).nullable().optional(),
+        customAvatarUrl: z.string().max(1_000_000).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       if (input.timezone && !isValidTimeZoneName(input.timezone)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid time zone" });
+      }
+      if (input.customAvatarUrl && !input.customAvatarUrl.startsWith("data:image/")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid avatar image" });
       }
 
       await updateUserTelegram(ctx.user.id, input);

@@ -263,7 +263,7 @@ export default function Home() {
         <div>
           <p className="text-xs text-muted-foreground font-medium">{t("greeting")}</p>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {user?.telegramFirstName || user?.name || t("user_fallback")}
+            {user?.customDisplayName || user?.telegramFirstName || user?.name || t("user_fallback")}
           </h1>
         </div>
         <Button

@@ -24,6 +24,8 @@ export const users = mysqlTable("users", {
   telegramFirstName: varchar("telegramFirstName", { length: 128 }),
   telegramLastName: varchar("telegramLastName", { length: 128 }),
   telegramPhotoUrl: text("telegramPhotoUrl"),
+  customDisplayName: varchar("customDisplayName", { length: 128 }),
+  customAvatarUrl: text("customAvatarUrl"),
   preferredLanguage: varchar("preferredLanguage", { length: 10 }).default("ru"),
   preferredCurrency: varchar("preferredCurrency", { length: 10 }).default("AZN"),
   remindersEnabled: boolean("remindersEnabled").default(true).notNull(),

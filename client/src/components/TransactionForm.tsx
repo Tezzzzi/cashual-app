@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,6 +58,7 @@ export default function TransactionForm({
     if (initialData?.originalCurrency) return initialData.originalCurrency;
     return initialData?.currency || "AZN";
   });
+  const hasUserChangedCurrencyRef = useRef(false);
   const [categoryId, setCategoryId] = useState<string>(
     initialData?.categoryId?.toString() || ""
   );
@@ -89,6 +90,15 @@ export default function TransactionForm({
 
   const userCurrency = currentUser?.preferredCurrency || "AZN";
   const isDifferentCurrency = currency.toUpperCase() !== userCurrency.toUpperCase();
+
+  useEffect(() => {
+    const preferredCurrency = currentUser?.preferredCurrency;
+    const hasInitialCurrency = Boolean(initialData?.currency || initialData?.originalCurrency);
+
+    if (!preferredCurrency || hasInitialCurrency || hasUserChangedCurrencyRef.current) return;
+
+    setCurrency(preferredCurrency);
+  }, [currentUser?.preferredCurrency, initialData?.currency, initialData?.originalCurrency]);
 
   // Once familyGroups and user settings load, apply the default budget preference
   useEffect(() => {
@@ -241,7 +251,13 @@ export default function TransactionForm({
         </div>
         <div className="w-24">
           <Label className="text-xs text-muted-foreground mb-1">{t("currency")}</Label>
-          <Select value={currency} onValueChange={setCurrency}>
+          <Select
+            value={currency}
+            onValueChange={(value) => {
+              hasUserChangedCurrencyRef.current = true;
+              setCurrency(value);
+            }}
+          >
             <SelectTrigger className="h-12">
               <SelectValue />
             </SelectTrigger>

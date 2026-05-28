@@ -55,8 +55,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     const stringFields = [
       "name", "email", "loginMethod",
       "telegramId", "telegramUsername", "telegramFirstName",
-      "telegramLastName", "telegramPhotoUrl",
-      "preferredLanguage", "preferredCurrency", "timezone",
+      "telegramLastName", "telegramPhotoUrl", "customDisplayName",
+      "customAvatarUrl", "preferredLanguage", "preferredCurrency", "timezone",
     ] as const;
 
     for (const field of stringFields) {
@@ -122,6 +122,8 @@ export async function updateUserTelegram(
     telegramFirstName?: string;
     telegramLastName?: string;
     telegramPhotoUrl?: string;
+    customDisplayName?: string | null;
+    customAvatarUrl?: string | null;
     preferredLanguage?: string;
     preferredCurrency?: string;
     timezone?: string | null;
