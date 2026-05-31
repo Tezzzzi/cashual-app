@@ -160,6 +160,20 @@ async function runAdditiveMigrations() {
       )
     `);
 
+    await ensureTable(conn, 'category_rules', `
+      CREATE TABLE \`category_rules\` (
+        \`id\` int AUTO_INCREMENT NOT NULL,
+        \`userId\` int NOT NULL,
+        \`descriptionPattern\` varchar(255) NOT NULL,
+        \`categoryId\` int NOT NULL,
+        \`hitCount\` int NOT NULL DEFAULT 1,
+        \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`unique_user_pattern\` (\`userId\`, \`descriptionPattern\`)
+      )
+    `);
+
     await ensureTable(conn, 'businessGroups', `
       CREATE TABLE \`businessGroups\` (
         \`id\` int AUTO_INCREMENT NOT NULL,

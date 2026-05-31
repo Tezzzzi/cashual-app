@@ -54,6 +54,20 @@ export const categories = mysqlTable("categories", {
 export type Category = typeof categories.$inferSelect;
 export type InsertCategory = typeof categories.$inferInsert;
 
+// ─── Category Learning Rules ─────────────────────────────────────────
+export const categoryRules = mysqlTable("category_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  descriptionPattern: varchar("descriptionPattern", { length: 255 }).notNull(),
+  categoryId: int("categoryId").notNull(),
+  hitCount: int("hitCount").notNull().default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CategoryRule = typeof categoryRules.$inferSelect;
+export type InsertCategoryRule = typeof categoryRules.$inferInsert;
+
 // ─── Transactions ────────────────────────────────────────────────────
 export const transactions = mysqlTable("transactions", {
   id: int("id").autoincrement().primaryKey(),

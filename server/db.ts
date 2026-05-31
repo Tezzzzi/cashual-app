@@ -1,9 +1,10 @@
-import { eq, and, sql, desc, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, or, sql, desc, gte, lte, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
   users,
   categories,
+  categoryRules,
   transactions,
   familyGroups,
   familyGroupMembers,
@@ -320,6 +321,74 @@ export async function updateTransaction(
     .update(transactions)
     .set(normalizedData)
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+}
+
+function normalizeDescriptionPattern(description: string) {
+  return description.trim().toLowerCase().slice(0, 255);
+}
+
+// ─── Category Learning Rules ─────────────────────────────────────────
+export async function upsertCategoryRule(userId: number, description: string, categoryId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const pattern = normalizeDescriptionPattern(description);
+  if (!pattern || pattern.length < 2) return;
+
+  await db.execute(sql`
+    INSERT INTO category_rules (userId, descriptionPattern, categoryId, hitCount)
+    VALUES (${userId}, ${pattern}, ${categoryId}, 1)
+    ON DUPLICATE KEY UPDATE
+      categoryId = VALUES(categoryId),
+      hitCount = hitCount + 1,
+      updatedAt = CURRENT_TIMESTAMP
+  `);
+}
+
+export async function findLearnedCategory(userId: number, description: string): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const pattern = normalizeDescriptionPattern(description);
+  if (!pattern || pattern.length < 2) return null;
+
+  const exact = await db
+    .select()
+    .from(categoryRules)
+    .where(and(eq(categoryRules.userId, userId), eq(categoryRules.descriptionPattern, pattern)))
+    .limit(1);
+
+  if (exact.length > 0) return exact[0].categoryId;
+
+  const partial = await db
+    .select()
+    .from(categoryRules)
+    .where(and(
+      eq(categoryRules.userId, userId),
+      or(
+        sql`${pattern} LIKE CONCAT('%', ${categoryRules.descriptionPattern}, '%')`,
+        sql`${categoryRules.descriptionPattern} LIKE CONCAT('%', ${pattern}, '%')`
+      )
+    ))
+    .orderBy(desc(categoryRules.hitCount))
+    .limit(1);
+
+  return partial.length > 0 ? partial[0].categoryId : null;
+}
+
+export async function getUserCategoryRules(userId: number): Promise<Array<{ pattern: string; categoryId: number; hitCount: number }>> {
+  const db = await getDb();
+  if (!db) return [];
+  const rules = await db
+    .select()
+    .from(categoryRules)
+    .where(eq(categoryRules.userId, userId))
+    .orderBy(desc(categoryRules.hitCount))
+    .limit(50);
+
+  return rules.map((r) => ({
+    pattern: r.descriptionPattern,
+    categoryId: r.categoryId,
+    hitCount: r.hitCount,
+  }));
 }
 
 export async function deleteTransaction(id: number, userId: number) {

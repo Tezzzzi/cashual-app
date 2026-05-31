@@ -34,6 +34,9 @@ import {
   updateBusinessGroup,
   deleteBusinessGroup,
   getDb,
+  upsertCategoryRule,
+  findLearnedCategory,
+  getUserCategoryRules,
 } from "./db";
 import { transactions, categories } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
@@ -300,7 +303,7 @@ const transactionsRouter = router({
         exchangeRate = conversion.exchangeRate.toFixed(8);
       }
 
-      return createTransaction({
+      const result = await createTransaction({
         ...input,
         amount: finalAmount,
         currency: userCurrency,
@@ -312,6 +315,12 @@ const transactionsRouter = router({
         isWork: input.isWork ?? false,
         businessGroupId: input.isWork ? (input.businessGroupId ?? null) : null,
       });
+
+      if (input.description && input.categoryId) {
+        await upsertCategoryRule(ctx.user.id, input.description, input.categoryId);
+      }
+
+      return result;
     }),
 
   update: protectedProcedure
@@ -332,6 +341,19 @@ const transactionsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      let existingTransaction: { id: number; categoryId: number; description: string | null } | null = null;
+      if (input.categoryId !== undefined) {
+        const db = await getDb();
+        if (db) {
+          const existing = await db
+            .select({ id: transactions.id, categoryId: transactions.categoryId, description: transactions.description })
+            .from(transactions)
+            .where(and(eq(transactions.id, id), eq(transactions.userId, ctx.user.id)))
+            .limit(1);
+          existingTransaction = existing[0] ?? null;
+        }
+      }
+
       // Normalize: if isWork is explicitly set to false, clear businessGroupId
       if (data.isWork === false) {
         data.businessGroupId = null;
@@ -364,7 +386,26 @@ const transactionsRouter = router({
       }
 
       await updateTransaction(id, ctx.user.id, updateData as any);
+
+      if (
+        input.categoryId !== undefined &&
+        existingTransaction &&
+        existingTransaction.categoryId !== input.categoryId
+      ) {
+        const ruleDescription = (input.description ?? existingTransaction.description ?? "").trim();
+        if (ruleDescription) {
+          await upsertCategoryRule(ctx.user.id, ruleDescription, input.categoryId);
+        }
+      }
+
       return { success: true };
+    }),
+
+  suggestCategory: protectedProcedure
+    .input(z.object({ description: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const categoryId = await findLearnedCategory(ctx.user.id, input.description);
+      return { categoryId };
     }),
 
   delete: protectedProcedure
@@ -409,6 +450,16 @@ const voiceRouter = router({
       const businessGroupNames = userBusinessGroups.length > 0
         ? userBusinessGroups.map((g, i) => `${i + 1}. "${g.name}"`).join(", ")
         : "(none)";
+      const learnedRules = await getUserCategoryRules(ctx.user.id);
+      const userRulesPrompt = learnedRules.length > 0
+        ? learnedRules
+            .map((rule) => {
+              const category = userCategories.find((c) => c.id === rule.categoryId);
+              return category ? `"${rule.pattern}" → ${normalizeCategoryNameToEnglish(category.name)} (${rule.hitCount})` : null;
+            })
+            .filter(Boolean)
+            .join(", ")
+        : "(none)";
 
       // Step 3: Parse with LLM — supports MULTIPLE transactions in one voice message
       const now = new Date();
@@ -423,6 +474,10 @@ const voiceRouter = router({
 **CRITICAL: The user may dictate MULTIPLE transactions in a single message.** Each distinct expense/income mentioned should be a separate transaction in the array. Look for conjunctions like "и" (and), "а также", "плюс", "ещё", commas separating amounts, or different budget contexts as signals of multiple transactions.
 
 Available categories (canonical English names; choose one of these first when semantically appropriate): ${categoryNames}
+
+User's learned category preferences (description → category, usage count):
+${userRulesPrompt}
+These take priority over general rules when the description matches.
 
 CATEGORY LANGUAGE RULES:
 - ALWAYS return categoryName in English, regardless of the transcription language.
@@ -623,8 +678,17 @@ Always return a transactions array, even for a single transaction (array with on
           fixedDate = todayMs;
         }
 
-        // Resolve category: use existing or auto-create new one
+        // Resolve category: use existing or auto-create new one, then prefer learned user rules.
         let cat = findExistingCategory(tx.categoryName);
+
+        const learnedCategoryId = await findLearnedCategory(ctx.user.id, tx.description);
+        if (learnedCategoryId) {
+          const learnedCat = userCategories.find((c) => c.id === learnedCategoryId);
+          if (learnedCat) {
+            cat = learnedCat;
+          }
+        }
+
         if (!cat && tx.newCategoryEmoji) {
           // AI suggested a new category — auto-create it
           console.log(`[voice] Auto-creating category: "${tx.categoryName}" ${tx.newCategoryEmoji}`);

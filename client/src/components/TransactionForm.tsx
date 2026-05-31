@@ -82,12 +82,15 @@ export default function TransactionForm({
     return getLastUsedCurrency() || "AZN";
   });
   const hasUserChangedCurrencyRef = useRef(false);
+  const hasUserChangedCategoryRef = useRef(false);
   const [categoryId, setCategoryId] = useState<string>(
     initialData?.categoryId?.toString() || ""
   );
+  const [autoSuggestedCategoryId, setAutoSuggestedCategoryId] = useState<string | null>(null);
   const [description, setDescription] = useState(
     initialData?.description || ""
   );
+  const [debouncedDescription, setDebouncedDescription] = useState("");
   const [dateStr, setDateStr] = useState(() => {
     const d = initialData?.date ? new Date(initialData.date) : new Date();
     return d.toISOString().split("T")[0];
@@ -109,10 +112,21 @@ export default function TransactionForm({
   const { data: familyGroups } = trpc.family.myGroups.useQuery();
   const { data: businessGroups } = trpc.business.myGroups.useQuery();
   const { data: currentUser } = trpc.auth.me.useQuery();
+  const suggestCategoryQuery = trpc.transactions.suggestCategory.useQuery(
+    { description: debouncedDescription },
+    { enabled: !isEditing && debouncedDescription.length >= 2 }
+  );
   const utils = trpc.useUtils();
 
   const userCurrency = currentUser?.preferredCurrency || "AZN";
   const isDifferentCurrency = currency.toUpperCase() !== userCurrency.toUpperCase();
+
+  const filteredCategories = useMemo(() => {
+    if (!categories) return [];
+    return categories.filter(
+      (c) => c.type === "both" || c.type === type
+    );
+  }, [categories, type]);
 
   useEffect(() => {
     if (isEditing || hasUserChangedCurrencyRef.current) return;
@@ -128,6 +142,44 @@ export default function TransactionForm({
       setCurrency(preferredCurrency);
     }
   }, [currentUser?.preferredCurrency, isEditing]);
+
+  useEffect(() => {
+    if (isEditing) return;
+
+    const trimmedDescription = description.trim();
+    const timer = window.setTimeout(() => {
+      setDebouncedDescription(trimmedDescription);
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [description, isEditing]);
+
+  useEffect(() => {
+    if (isEditing) return;
+
+    if (debouncedDescription.length < 2) {
+      setAutoSuggestedCategoryId(null);
+      return;
+    }
+
+    const suggestedCategoryId = suggestCategoryQuery.data?.categoryId;
+    if (!suggestedCategoryId) {
+      setAutoSuggestedCategoryId(null);
+      return;
+    }
+
+    const nextCategoryId = suggestedCategoryId.toString();
+    const isAvailableForCurrentType = filteredCategories.some((category) => category.id === suggestedCategoryId);
+    if (!isAvailableForCurrentType) {
+      setAutoSuggestedCategoryId(null);
+      return;
+    }
+
+    if (!hasUserChangedCategoryRef.current || !categoryId) {
+      setCategoryId(nextCategoryId);
+      setAutoSuggestedCategoryId(nextCategoryId);
+    }
+  }, [categoryId, debouncedDescription.length, filteredCategories, isEditing, suggestCategoryQuery.data?.categoryId]);
 
   // Once familyGroups and user settings load, apply the default budget preference
   useEffect(() => {
@@ -172,13 +224,6 @@ export default function TransactionForm({
     },
     onError: (err) => toast.error(err.message),
   });
-
-  const filteredCategories = useMemo(() => {
-    if (!categories) return [];
-    return categories.filter(
-      (c) => c.type === "both" || c.type === type
-    );
-  }, [categories, type]);
 
   const isLoading = createMutation.isPending || updateMutation.isPending;
 
@@ -316,7 +361,14 @@ export default function TransactionForm({
       {/* Category */}
       <div>
         <Label className="text-xs text-muted-foreground mb-1">{t("category")}</Label>
-        <Select value={categoryId} onValueChange={setCategoryId}>
+        <Select
+          value={categoryId}
+          onValueChange={(value) => {
+            hasUserChangedCategoryRef.current = true;
+            setCategoryId(value);
+            setAutoSuggestedCategoryId(null);
+          }}
+        >
           <SelectTrigger className="h-12">
             <SelectValue placeholder={t("select_category")} />
           </SelectTrigger>
@@ -331,6 +383,11 @@ export default function TransactionForm({
             ))}
           </SelectContent>
         </Select>
+        {autoSuggestedCategoryId && categoryId === autoSuggestedCategoryId && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Auto-suggested from your previous category corrections
+          </p>
+        )}
       </div>
 
       {/* Description */}
