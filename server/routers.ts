@@ -791,6 +791,18 @@ Always return a transactions array, even for a single transaction (array with on
       const userCategories = await getCategories(ctx.user.id);
       const categoryNames = buildCategoryPromptList(userCategories);
 
+      // Get user's learned category rules for receipt parsing
+      const learnedRulesReceipt = await getUserCategoryRules(ctx.user.id);
+      const receiptRulesPrompt = learnedRulesReceipt.length > 0
+        ? learnedRulesReceipt
+            .map((rule) => {
+              const category = userCategories.find((c) => c.id === rule.categoryId);
+              return category ? `"${rule.pattern}" → ${normalizeCategoryNameToEnglish(category.name)} (${rule.hitCount})` : null;
+            })
+            .filter(Boolean)
+            .join(", ")
+        : "(none)";
+
       const now = new Date();
       const currentYear = now.getFullYear();
       const todayMs = now.getTime();
@@ -801,6 +813,10 @@ Always return a transactions array, even for a single transaction (array with on
             content: `You are a financial transaction image parser. Analyze the provided image and extract transaction data.
 
 	Available categories (canonical English names; choose one of these first when semantically appropriate): ${categoryNames}
+
+User's learned category preferences (description → category, usage count):
+${receiptRulesPrompt}
+These take priority over general rules when the description matches.
 
 	CATEGORY LANGUAGE RULES:
 	- ALWAYS return categoryName in English, regardless of the image language.
@@ -988,6 +1004,16 @@ Always return a transactions array, even for a single receipt (array with one it
 
       const enrichedTransactions = await Promise.all(parsed.transactions.map(async (tx) => {
         let cat = findExistingCategoryReceipt(tx.categoryName);
+
+        // Check learned category rules — override AI suggestion if user has a preference
+        const learnedCategoryIdReceipt = await findLearnedCategory(ctx.user.id, tx.description);
+        if (learnedCategoryIdReceipt) {
+          const learnedCat = userCategories.find((c) => c.id === learnedCategoryIdReceipt);
+          if (learnedCat) {
+            cat = learnedCat;
+          }
+        }
+
         if (!cat && tx.newCategoryEmoji) {
           console.log(`[receipt] Auto-creating category: "${tx.categoryName}" ${tx.newCategoryEmoji}`);
           cat = await autoCreateCategoryReceipt(tx.categoryName, tx.newCategoryEmoji);
@@ -1090,6 +1116,12 @@ Always return a transactions array, even for a single receipt (array with one it
           isWork: tx.isWork ?? false,
           businessGroupId: tx.isWork ? (tx.businessGroupId ?? null) : null,
         });
+
+        // Learn category from receipt transaction
+        if (tx.description && tx.categoryId) {
+          await upsertCategoryRule(ctx.user.id, tx.description, tx.categoryId);
+        }
+
         saved.push(i);
       }
 
