@@ -50,7 +50,6 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage, type Lang } from "@/contexts/LanguageContext";
@@ -978,15 +977,17 @@ function WalletSection() {
 
   const walletToken = tokenData?.walletToken || null;
 
-  // Generate token and open Shortcuts automation tab
+  // Generate token and copy the webhook link
   const handleConnect = async () => {
     let token = walletToken;
     if (!token) {
       const result = await generateToken.mutateAsync();
       token = result.walletToken;
     }
-    // Open the Shortcuts app to the Automation tab
-    window.location.href = "shortcuts://create-automation";
+    // Copy the link automatically
+    const link = WEBHOOK_BASE + "?token=" + (token || walletToken);
+    await copyToClipboard(link);
+    toast.success(t("wallet_link_copied_toast"));
   };
 
   const handleRegenerate = async () => {
@@ -1055,13 +1056,13 @@ function WalletSection() {
             <span>{t("wallet_connected")}</span>
           </div>
 
-          {/* Primary action: Open Shortcuts */}
+          {/* Primary action: Copy link */}
           <Button
             className="w-full"
-            onClick={() => { window.location.href = "shortcuts://create-automation"; }}
+            onClick={() => copyToClipboard(WEBHOOK_BASE + "?token=" + walletToken)}
           >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            {t("wallet_open_shortcuts")}
+            <Copy className="mr-2 h-4 w-4" />
+            {t("wallet_copy_link")}
           </Button>
 
           {/* Quick setup summary */}
@@ -1073,17 +1074,6 @@ function WalletSection() {
               <li>{t("wallet_step_3_simple")}</li>
             </ol>
           </div>
-
-          {/* Copy URL+Token button (single combined button) */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full text-xs"
-            onClick={() => copyToClipboard(WEBHOOK_BASE + "?token=" + walletToken)}
-          >
-            <Copy className="mr-1.5 h-3.5 w-3.5" />
-            {t("wallet_copy_link")}
-          </Button>
 
           {/* Toggle details */}
           <Button
