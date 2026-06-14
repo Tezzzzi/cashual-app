@@ -962,6 +962,7 @@ const WEBHOOK_BASE = "https://cashual-production.up.railway.app/api/wallet/trans
 function WalletSection() {
   const { t } = useLanguage();
   const [showDetails, setShowDetails] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -970,7 +971,6 @@ function WalletSection() {
   const generateToken = trpc.settings.generateWalletToken.useMutation({
     onSuccess: () => {
       utils.settings.getWalletToken.invalidate();
-      toast.success(t("wallet_token_generated"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -984,30 +984,38 @@ function WalletSection() {
       const result = await generateToken.mutateAsync();
       token = result.walletToken;
     }
-    // Copy the link automatically
     const link = WEBHOOK_BASE + "?token=" + (token || walletToken);
-    await copyToClipboard(link);
-    toast.success(t("wallet_link_copied_toast"));
+    await copyLink(link);
   };
 
   const handleRegenerate = async () => {
     await generateToken.mutateAsync();
   };
 
-  const copyToClipboard = useCallback(async (text: string) => {
+  const copyLink = useCallback(async (text: string) => {
     try {
+      // Try Telegram WebApp clipboard first
+      if ((window as any).Telegram?.WebApp?.readTextFromClipboard) {
+        // Telegram doesn't have writeToClipboard, use fallback
+      }
+      // Try native clipboard API
       await navigator.clipboard.writeText(text);
-      toast.success(t("wallet_copied"));
     } catch {
+      // Fallback: textarea method
       const textarea = document.createElement("textarea");
       textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
       document.body.appendChild(textarea);
+      textarea.focus();
       textarea.select();
       document.execCommand("copy");
       document.body.removeChild(textarea);
-      toast.success(t("wallet_copied"));
     }
-  }, [t]);
+    // Show visual feedback on button
+    setCopied(true);
+    setTimeout(() => setCopied(false), 4000);
+  }, []);
 
   if (isLoading) {
     return (
@@ -1058,11 +1066,20 @@ function WalletSection() {
 
           {/* Primary action: Copy link */}
           <Button
-            className="w-full"
-            onClick={() => copyToClipboard(WEBHOOK_BASE + "?token=" + walletToken)}
+            className={`w-full ${copied ? "bg-green-600 hover:bg-green-600" : ""}`}
+            onClick={() => copyLink(WEBHOOK_BASE + "?token=" + walletToken)}
           >
-            <Copy className="mr-2 h-4 w-4" />
-            {t("wallet_copy_link")}
+            {copied ? (
+              <>
+                <Check className="mr-2 h-4 w-4" />
+                {t("wallet_link_copied_toast")}
+              </>
+            ) : (
+              <>
+                <Copy className="mr-2 h-4 w-4" />
+                {t("wallet_copy_link")}
+              </>
+            )}
           </Button>
 
           {/* Quick setup summary */}
