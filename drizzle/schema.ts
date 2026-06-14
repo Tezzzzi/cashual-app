@@ -30,6 +30,7 @@ export const users = mysqlTable("users", {
   preferredCurrency: varchar("preferredCurrency", { length: 10 }).default("AZN"),
   remindersEnabled: boolean("remindersEnabled").default(true).notNull(),
   timezone: varchar("timezone", { length: 64 }),
+  walletToken: varchar("walletToken", { length: 64 }),
   defaultBudget: mysqlEnum("defaultBudget", ["personal", "family"]).default("personal"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,11 @@ import {
   AlertTriangle,
   Bell,
   Camera,
+  Smartphone,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage, type Lang } from "@/contexts/LanguageContext";
@@ -545,6 +550,9 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Apple Wallet */}
+      <WalletSection />
+
       {/* Info */}
       <div className="tg-card space-y-2">
         <div className="flex items-center gap-2">
@@ -943,6 +951,229 @@ export default function Settings() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─── Apple Wallet Section ─────────────────────────────────────────────────────
+
+const WEBHOOK_URL = "https://cashual-production.up.railway.app/api/wallet/transaction";
+
+function WalletSection() {
+  const { t } = useLanguage();
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const utils = trpc.useUtils();
+
+  const { data: tokenData, isLoading } = trpc.settings.getWalletToken.useQuery();
+
+  const generateToken = trpc.settings.generateWalletToken.useMutation({
+    onSuccess: () => {
+      utils.settings.getWalletToken.invalidate();
+      toast.success(t("wallet_token_generated"));
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const walletToken = tokenData?.walletToken || null;
+
+  const handleConnect = () => {
+    if (!walletToken) {
+      generateToken.mutate();
+    }
+    setShowInstructions(true);
+  };
+
+  const handleRegenerate = () => {
+    generateToken.mutate();
+  };
+
+  const copyToClipboard = useCallback(async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      toast.success(t("wallet_copied"));
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch {
+      // Fallback for environments where clipboard API is unavailable
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopiedField(field);
+      toast.success(t("wallet_copied"));
+      setTimeout(() => setCopiedField(null), 2000);
+    }
+  }, [t]);
+
+  if (isLoading) {
+    return (
+      <div className="tg-card space-y-3">
+        <div className="flex items-center gap-2">
+          <Smartphone className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">{t("wallet_title")}</span>
+        </div>
+        <div className="flex justify-center py-2">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="tg-card space-y-3">
+      <div className="flex items-center gap-2">
+        <Smartphone className="h-4 w-4 text-muted-foreground" />
+        <div>
+          <span className="text-sm font-medium">{t("wallet_title")}</span>
+          <p className="text-[10px] text-muted-foreground">{t("wallet_description")}</p>
+        </div>
+      </div>
+
+      {!walletToken && !showInstructions && (
+        <Button
+          className="w-full"
+          onClick={handleConnect}
+          disabled={generateToken.isPending}
+        >
+          {generateToken.isPending ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Wallet className="mr-2 h-4 w-4" />
+          )}
+          {t("wallet_connect")}
+        </Button>
+      )}
+
+      {walletToken && !showInstructions && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-green-600">
+            <Check className="h-3.5 w-3.5" />
+            <span>{t("wallet_connected")}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => setShowInstructions(true)}
+          >
+            {t("wallet_show_instructions")}
+            <ChevronDown className="ml-1 h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
+      {showInstructions && walletToken && (
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold">{t("wallet_setup_title")}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setShowInstructions(false)}
+            >
+              {t("wallet_hide_instructions")}
+              <ChevronUp className="ml-1 h-3 w-3" />
+            </Button>
+          </div>
+
+          <ol className="space-y-1.5 text-xs text-muted-foreground list-decimal list-inside">
+            <li>{t("wallet_step_1")}</li>
+            <li>{t("wallet_step_2")}</li>
+            <li>{t("wallet_step_3")}</li>
+            <li>{t("wallet_step_4")}</li>
+          </ol>
+
+          {/* URL */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              {t("wallet_url_label")}
+            </label>
+            <div className="flex items-center gap-1.5">
+              <code className="flex-1 text-[10px] bg-secondary/50 rounded px-2 py-1.5 break-all font-mono">
+                {WEBHOOK_URL}
+              </code>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                onClick={() => copyToClipboard(WEBHOOK_URL, "url")}
+              >
+                {copiedField === "url" ? (
+                  <Check className="h-3 w-3 text-green-600" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Token */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              {t("wallet_token_label")}
+            </label>
+            <div className="flex items-center gap-1.5">
+              <code className="flex-1 text-[10px] bg-secondary/50 rounded px-2 py-1.5 break-all font-mono">
+                {walletToken}
+              </code>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                onClick={() => copyToClipboard(walletToken, "token")}
+              >
+                {copiedField === "token" ? (
+                  <Check className="h-3 w-3 text-green-600" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Request details */}
+          <div className="space-y-1.5 text-[10px] bg-secondary/30 rounded-md p-2.5">
+            <p className="font-medium">{t("wallet_method")}</p>
+            <p className="font-medium">{t("wallet_headers")}</p>
+            <code className="block text-muted-foreground pl-2 font-mono">
+              Authorization: Bearer {"<token>"}
+            </code>
+            <code className="block text-muted-foreground pl-2 font-mono">
+              Content-Type: application/json
+            </code>
+            <p className="font-medium pt-1">{t("wallet_body")}</p>
+            <pre className="text-muted-foreground pl-2 font-mono whitespace-pre-wrap">
+{`{
+  "amount": <Amount>,
+  "merchant": "<Merchant>",
+  "currency": "<Currency Code>",
+  "date": "<ISO Date>",
+  "cardName": "<Card Name>"
+}`}
+            </pre>
+            <p className="text-muted-foreground italic pt-1">{t("wallet_body_hint")}</p>
+          </div>
+
+          {/* Regenerate token */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full text-xs"
+            onClick={handleRegenerate}
+            disabled={generateToken.isPending}
+          >
+            {generateToken.isPending ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : null}
+            {t("wallet_regenerate")}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

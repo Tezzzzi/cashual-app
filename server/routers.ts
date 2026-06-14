@@ -38,7 +38,7 @@ import {
   findLearnedCategory,
   getUserCategoryRules,
 } from "./db";
-import { transactions, categories } from "../drizzle/schema";
+import { transactions, categories, users } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { transcribeAudio } from "./_core/openai-whisper";
 import { invokeLLM } from "./_core/openai-llm";
@@ -1509,6 +1509,18 @@ const settingsRouter = router({
       remindersEnabled: ctx.user.remindersEnabled ?? true,
       timezone: ctx.user.timezone || null,
     };
+  }),
+
+  getWalletToken: protectedProcedure.query(async ({ ctx }) => {
+    return { walletToken: (ctx.user as any).walletToken || null };
+  }),
+
+  generateWalletToken: protectedProcedure.mutation(async ({ ctx }) => {
+    const token = nanoid(32);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
+    await db.update(users).set({ walletToken: token }).where(eq(users.id, ctx.user.id));
+    return { walletToken: token };
   }),
 
   update: protectedProcedure

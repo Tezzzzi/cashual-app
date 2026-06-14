@@ -7,6 +7,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerTelegramRoutes } from "./telegram-routes";
+import { registerWalletRoutes } from "../wallet-routes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic } from "./static";
@@ -105,6 +106,9 @@ async function startServer() {
 
   // Telegram authentication routes
   registerTelegramRoutes(app);
+
+  // Apple Wallet webhook routes
+  registerWalletRoutes(app);
 
   // Admin SQL backup download route
   registerBackupRoute(app);
