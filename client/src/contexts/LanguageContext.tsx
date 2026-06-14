@@ -288,6 +288,14 @@ const translations = {
     wallet_regenerate: "Сгенерировать новый токен",
     wallet_hide_instructions: "Скрыть инструкции",
     wallet_show_instructions: "Показать инструкции",
+    wallet_open_shortcuts: "Открыть Shortcuts",
+    wallet_quick_setup: "Быстрая настройка (3 шага):",
+    wallet_step_1_simple: "Выберите триггер \"Транзакция\" → Любая карта",
+    wallet_step_2_simple: "Добавьте действие \"Получить содержимое URL\" и вставьте скопированную ссылку",
+    wallet_step_3_simple: "Готово! Каждая оплата Apple Pay будет записываться автоматически",
+    wallet_copy_link: "Скопировать ссылку для Shortcuts",
+    wallet_hide_details: "Скрыть детали",
+    wallet_show_details: "Показать детали",
   },
 
   az: {
@@ -574,6 +582,14 @@ const translations = {
     wallet_regenerate: "Yeni token yarat",
     wallet_hide_instructions: "Təlimatları gizlət",
     wallet_show_instructions: "Təlimatları göstər",
+    wallet_open_shortcuts: "Shortcuts aç",
+    wallet_quick_setup: "Sürətli quraşdırma (3 addım):",
+    wallet_step_1_simple: "\"Tranzaksiya\" triggeri seçin → Hər hansı kart",
+    wallet_step_2_simple: "\"URL məzmununu al\" əməliyyatını əlavə edin və kopyalanmış linki yapışdırın",
+    wallet_step_3_simple: "Hazırdır! Hər Apple Pay ödənişi avtomatik qeyd olunacaq",
+    wallet_copy_link: "Shortcuts üçün linki kopyala",
+    wallet_hide_details: "Detalları gizlət",
+    wallet_show_details: "Detalları göstər",
   },
 
   en: {
@@ -860,6 +876,14 @@ const translations = {
     wallet_regenerate: "Generate new token",
     wallet_hide_instructions: "Hide instructions",
     wallet_show_instructions: "Show instructions",
+    wallet_open_shortcuts: "Open Shortcuts",
+    wallet_quick_setup: "Quick setup (3 steps):",
+    wallet_step_1_simple: "Select \"Transaction\" trigger → Any Card",
+    wallet_step_2_simple: "Add \"Get Contents of URL\" action and paste the copied link",
+    wallet_step_3_simple: "Done! Every Apple Pay payment will be logged automatically",
+    wallet_copy_link: "Copy link for Shortcuts",
+    wallet_hide_details: "Hide details",
+    wallet_show_details: "Show details",
   },
 } as const;
 

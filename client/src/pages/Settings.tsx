@@ -50,6 +50,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage, type Lang } from "@/contexts/LanguageContext";
@@ -957,12 +958,11 @@ export default function Settings() {
 
 // ─── Apple Wallet Section ─────────────────────────────────────────────────────
 
-const WEBHOOK_URL = "https://cashual-production.up.railway.app/api/wallet/transaction";
+const WEBHOOK_BASE = "https://cashual-production.up.railway.app/api/wallet/transaction";
 
 function WalletSection() {
   const { t } = useLanguage();
-  const [showInstructions, setShowInstructions] = useState(false);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -978,34 +978,33 @@ function WalletSection() {
 
   const walletToken = tokenData?.walletToken || null;
 
-  const handleConnect = () => {
-    if (!walletToken) {
-      generateToken.mutate();
+  // Generate token and open Shortcuts automation tab
+  const handleConnect = async () => {
+    let token = walletToken;
+    if (!token) {
+      const result = await generateToken.mutateAsync();
+      token = result.walletToken;
     }
-    setShowInstructions(true);
+    // Open the Shortcuts app to the Automation tab
+    window.location.href = "shortcuts://create-automation";
   };
 
-  const handleRegenerate = () => {
-    generateToken.mutate();
+  const handleRegenerate = async () => {
+    await generateToken.mutateAsync();
   };
 
-  const copyToClipboard = useCallback(async (text: string, field: string) => {
+  const copyToClipboard = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopiedField(field);
       toast.success(t("wallet_copied"));
-      setTimeout(() => setCopiedField(null), 2000);
     } catch {
-      // Fallback for environments where clipboard API is unavailable
       const textarea = document.createElement("textarea");
       textarea.value = text;
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand("copy");
       document.body.removeChild(textarea);
-      setCopiedField(field);
       toast.success(t("wallet_copied"));
-      setTimeout(() => setCopiedField(null), 2000);
     }
   }, [t]);
 
@@ -1033,7 +1032,7 @@ function WalletSection() {
         </div>
       </div>
 
-      {!walletToken && !showInstructions && (
+      {!walletToken && (
         <Button
           className="w-full"
           onClick={handleConnect}
@@ -1048,130 +1047,77 @@ function WalletSection() {
         </Button>
       )}
 
-      {walletToken && !showInstructions && (
-        <div className="space-y-2">
+      {walletToken && (
+        <div className="space-y-3">
+          {/* Connected status + Open Shortcuts button */}
           <div className="flex items-center gap-2 text-xs text-green-600">
             <Check className="h-3.5 w-3.5" />
             <span>{t("wallet_connected")}</span>
           </div>
+
+          {/* Primary action: Open Shortcuts */}
           <Button
-            variant="outline"
-            size="sm"
             className="w-full"
-            onClick={() => setShowInstructions(true)}
+            onClick={() => { window.location.href = "shortcuts://create-automation"; }}
           >
-            {t("wallet_show_instructions")}
-            <ChevronDown className="ml-1 h-3.5 w-3.5" />
+            <ExternalLink className="mr-2 h-4 w-4" />
+            {t("wallet_open_shortcuts")}
           </Button>
-        </div>
-      )}
 
-      {showInstructions && walletToken && (
-        <div className="space-y-3 pt-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold">{t("wallet_setup_title")}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setShowInstructions(false)}
-            >
-              {t("wallet_hide_instructions")}
-              <ChevronUp className="ml-1 h-3 w-3" />
-            </Button>
+          {/* Quick setup summary */}
+          <div className="bg-secondary/30 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-medium">{t("wallet_quick_setup")}</p>
+            <ol className="space-y-1 text-[11px] text-muted-foreground list-decimal list-inside">
+              <li>{t("wallet_step_1_simple")}</li>
+              <li>{t("wallet_step_2_simple")}</li>
+              <li>{t("wallet_step_3_simple")}</li>
+            </ol>
           </div>
 
-          <ol className="space-y-1.5 text-xs text-muted-foreground list-decimal list-inside">
-            <li>{t("wallet_step_1")}</li>
-            <li>{t("wallet_step_2")}</li>
-            <li>{t("wallet_step_3")}</li>
-            <li>{t("wallet_step_4")}</li>
-          </ol>
-
-          {/* URL */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              {t("wallet_url_label")}
-            </label>
-            <div className="flex items-center gap-1.5">
-              <code className="flex-1 text-[10px] bg-secondary/50 rounded px-2 py-1.5 break-all font-mono">
-                {WEBHOOK_URL}
-              </code>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                onClick={() => copyToClipboard(WEBHOOK_URL, "url")}
-              >
-                {copiedField === "url" ? (
-                  <Check className="h-3 w-3 text-green-600" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-              </Button>
-            </div>
-          </div>
-
-          {/* Token */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              {t("wallet_token_label")}
-            </label>
-            <div className="flex items-center gap-1.5">
-              <code className="flex-1 text-[10px] bg-secondary/50 rounded px-2 py-1.5 break-all font-mono">
-                {walletToken}
-              </code>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                onClick={() => copyToClipboard(walletToken, "token")}
-              >
-                {copiedField === "token" ? (
-                  <Check className="h-3 w-3 text-green-600" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-              </Button>
-            </div>
-          </div>
-
-          {/* Request details */}
-          <div className="space-y-1.5 text-[10px] bg-secondary/30 rounded-md p-2.5">
-            <p className="font-medium">{t("wallet_method")}</p>
-            <p className="font-medium">{t("wallet_headers")}</p>
-            <code className="block text-muted-foreground pl-2 font-mono">
-              Authorization: Bearer {"<token>"}
-            </code>
-            <code className="block text-muted-foreground pl-2 font-mono">
-              Content-Type: application/json
-            </code>
-            <p className="font-medium pt-1">{t("wallet_body")}</p>
-            <pre className="text-muted-foreground pl-2 font-mono whitespace-pre-wrap">
-{`{
-  "amount": <Amount>,
-  "merchant": "<Merchant>",
-  "currency": "<Currency Code>",
-  "date": "<ISO Date>",
-  "cardName": "<Card Name>"
-}`}
-            </pre>
-            <p className="text-muted-foreground italic pt-1">{t("wallet_body_hint")}</p>
-          </div>
-
-          {/* Regenerate token */}
+          {/* Copy URL+Token button (single combined button) */}
           <Button
             variant="outline"
             size="sm"
             className="w-full text-xs"
-            onClick={handleRegenerate}
-            disabled={generateToken.isPending}
+            onClick={() => copyToClipboard(WEBHOOK_BASE + "?token=" + walletToken)}
           >
-            {generateToken.isPending ? (
-              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-            ) : null}
-            {t("wallet_regenerate")}
+            <Copy className="mr-1.5 h-3.5 w-3.5" />
+            {t("wallet_copy_link")}
           </Button>
+
+          {/* Toggle details */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs text-muted-foreground"
+            onClick={() => setShowDetails(!showDetails)}
+          >
+            {showDetails ? t("wallet_hide_details") : t("wallet_show_details")}
+            {showDetails ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />}
+          </Button>
+
+          {showDetails && (
+            <div className="space-y-2 text-[10px] text-muted-foreground">
+              <div className="bg-secondary/50 rounded px-2 py-1.5">
+                <p className="font-medium text-foreground mb-1">URL:</p>
+                <code className="break-all font-mono">{WEBHOOK_BASE}</code>
+              </div>
+              <div className="bg-secondary/50 rounded px-2 py-1.5">
+                <p className="font-medium text-foreground mb-1">Token:</p>
+                <code className="break-all font-mono">{walletToken}</code>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                onClick={handleRegenerate}
+                disabled={generateToken.isPending}
+              >
+                {generateToken.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                {t("wallet_regenerate")}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
