@@ -175,17 +175,107 @@ async function categorizeTransaction(
 // ─── Register Routes ─────────────────────────────────────────────────────────
 
 export function registerWalletRoutes(app: Express) {
+  // ─── Simple GET endpoint (for iOS Shortcuts - just paste URL) ───────────────
+  app.get(
+    "/api/wallet/transaction",
+    walletLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        // All params come from URL query string
+        const { token, amount, merchant, currency, date, card } = req.query as Record<string, string>;
+
+        if (!token || token.length < 10) {
+          return res.status(401).json({ error: "Invalid token" });
+        }
+
+        const numAmount = parseFloat(amount);
+        if (!amount || isNaN(numAmount) || numAmount <= 0) {
+          return res.status(400).json({ error: "Invalid amount" });
+        }
+        if (!merchant) {
+          return res.status(400).json({ error: "Invalid merchant" });
+        }
+
+        // Authenticate user by token
+        const user = await getUserByWalletToken(token);
+        if (!user) {
+          return res.status(401).json({ error: "Invalid token" });
+        }
+
+        // Get user categories
+        const userCategories = await getCategories(user.id);
+        if (!userCategories || userCategories.length === 0) {
+          return res.status(500).json({ error: "No categories available" });
+        }
+
+        // Auto-categorize
+        const { categoryId, categoryName } = await categorizeTransaction(
+          user.id,
+          merchant,
+          userCategories
+        );
+
+        // Determine date and currency
+        const txDate = date ? new Date(date).getTime() : Date.now();
+        const txCurrency = (currency || user.preferredCurrency || "EUR").toUpperCase();
+        const description = card ? `${merchant} (${card})` : merchant;
+
+        // Save transaction
+        const result = await createTransaction({
+          userId: user.id,
+          categoryId,
+          type: "expense",
+          amount: numAmount.toFixed(2),
+          currency: txCurrency,
+          description,
+          date: txDate,
+          isFamily: false,
+          familyGroupId: null,
+          isWork: false,
+          businessGroupId: null,
+          originalAmount: null,
+          originalCurrency: null,
+          exchangeRate: null,
+          sourceLanguage: null,
+          rawTranscription: null,
+        });
+
+        // Learn category rule
+        await upsertCategoryRule(user.id, merchant, categoryId);
+
+        // Send Telegram notification
+        if (user.telegramId) {
+          const notificationText = `✅ Записано: ${merchant} ${numAmount}${txCurrency} → ${categoryName}`;
+          await sendTelegramNotification(user.telegramId, notificationText);
+        }
+
+        return res.status(200).json({
+          success: true,
+          transactionId: result?.id ?? null,
+          category: categoryName,
+        });
+      } catch (err) {
+        console.error("[Wallet] GET webhook error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  );
+
+  // ─── POST endpoint (legacy, with Authorization header) ─────────────────────
   app.post(
     "/api/wallet/transaction",
     walletLimiter,
     async (req: Request, res: Response) => {
       try {
-        // Validate Authorization header
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith("Bearer ")) {
-          return res.status(401).json({ error: "Missing or invalid authorization token" });
+        // Support token from query string OR Authorization header
+        let token = (req.query.token as string) || "";
+        if (!token) {
+          const authHeader = req.headers.authorization;
+          if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            return res.status(401).json({ error: "Missing or invalid authorization token" });
+          }
+          token = authHeader.slice(7).trim();
         }
-        const token = authHeader.slice(7).trim();
         if (!token || token.length < 10) {
           return res.status(401).json({ error: "Invalid token format" });
         }

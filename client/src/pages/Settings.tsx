@@ -1067,7 +1067,7 @@ function WalletSection() {
           {/* Primary action: Copy link */}
           <Button
             className={`w-full ${copied ? "bg-green-600 hover:bg-green-600" : ""}`}
-            onClick={() => copyLink(WEBHOOK_BASE + "?token=" + walletToken)}
+            onClick={() => copyLink(WEBHOOK_BASE + "?token=" + walletToken + "&amount=AMOUNT&merchant=MERCHANT&currency=CURRENCY_CODE")}
           >
             {copied ? (
               <>
@@ -1086,9 +1086,9 @@ function WalletSection() {
           <div className="bg-secondary/30 rounded-lg p-3 space-y-2">
             <p className="text-xs font-medium">{t("wallet_quick_setup")}</p>
             <ol className="space-y-1 text-[11px] text-muted-foreground list-decimal list-inside">
-              <li>{t("wallet_step_1_simple")}</li>
-              <li>{t("wallet_step_2_simple")}</li>
-              <li>{t("wallet_step_3_simple")}</li>
+              <li>{t("wallet_step_1_new")}</li>
+              <li>{t("wallet_step_2_new")}</li>
+              <li>{t("wallet_step_3_new")}</li>
             </ol>
           </div>
 
