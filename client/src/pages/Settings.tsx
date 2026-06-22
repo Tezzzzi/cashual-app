@@ -957,7 +957,7 @@ export default function Settings() {
 
 // ─── Apple Wallet Section ─────────────────────────────────────────────────────
 
-const WEBHOOK_BASE = "https://cashual-production.up.railway.app/api/wallet/transaction";
+const WEBHOOK_BASE = "https://cashual-app-production.up.railway.app/api/wallet/transaction";
 
 function WalletSection() {
   const { t } = useLanguage();
