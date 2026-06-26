@@ -23,6 +23,35 @@ const walletLimiter = rateLimit({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Parse amount from various formats:
+ * "3.30", "3,30", "3,30 €", "3.30 EUR", "€3.30", "EUR 3.30", "1 234,56"
+ */
+function parseAmountString(raw: string | undefined): number {
+  if (!raw) return NaN;
+  // Remove currency symbols and codes
+  let cleaned = raw.replace(/[€$£¥₽₺₴\s]/g, "").replace(/[A-Za-z]{3}/g, "").trim();
+  // If empty after cleaning, try original with just whitespace removed
+  if (!cleaned) cleaned = raw.replace(/\s/g, "");
+  // Handle European format: 1.234,56 or 3,30
+  // If there's a comma and no dot after it, treat comma as decimal separator
+  if (cleaned.includes(",")) {
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastDot = cleaned.lastIndexOf(".");
+    if (lastComma > lastDot) {
+      // Comma is the decimal separator: remove dots (thousands), replace comma with dot
+      cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+    }
+    // else dot is decimal separator, just remove commas (thousands)
+    else {
+      cleaned = cleaned.replace(/,/g, "");
+    }
+  }
+  // Remove any remaining non-numeric chars except dot and minus
+  cleaned = cleaned.replace(/[^0-9.\-]/g, "");
+  return parseFloat(cleaned);
+}
+
 async function getUserByWalletToken(token: string) {
   const db = await getDb();
   if (!db) return null;
@@ -188,9 +217,12 @@ export function registerWalletRoutes(app: Express) {
           return res.status(401).json({ error: "Invalid token" });
         }
 
-        const numAmount = parseFloat(amount);
+        console.log("[Wallet] GET request params:", { token: token?.slice(0, 8) + "...", amount, merchant, currency, date, card });
+
+        const numAmount = parseAmountString(amount);
         if (!amount || isNaN(numAmount) || numAmount <= 0) {
-          return res.status(400).json({ error: "Invalid amount" });
+          console.error("[Wallet] Invalid amount:", JSON.stringify(amount), "parsed as:", numAmount);
+          return res.status(400).json({ error: "Invalid amount", received: amount, parsed: numAmount });
         }
         if (!merchant) {
           return res.status(400).json({ error: "Invalid merchant" });
