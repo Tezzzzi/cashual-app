@@ -210,6 +210,10 @@ export function registerWalletRoutes(app: Express) {
     walletLimiter,
     async (req: Request, res: Response) => {
       try {
+        // Log the full raw URL for debugging
+        console.log("[Wallet] Full URL:", req.originalUrl);
+        console.log("[Wallet] Raw query string:", req.url.split("?")[1]);
+
         // All params come from URL query string
         const { token, amount, merchant, currency, date, card } = req.query as Record<string, string>;
 
@@ -217,7 +221,7 @@ export function registerWalletRoutes(app: Express) {
           return res.status(401).json({ error: "Invalid token" });
         }
 
-        console.log("[Wallet] GET request params:", { token: token?.slice(0, 8) + "...", amount, merchant, currency, date, card });
+        console.log("[Wallet] Parsed params:", { token: token?.slice(0, 8) + "...", amount, merchant, currency, date, card });
 
         const numAmount = parseAmountString(amount);
         if (!amount || isNaN(numAmount) || numAmount <= 0) {
