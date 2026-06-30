@@ -95,6 +95,9 @@ export default function TransactionForm({
     const d = initialData?.date ? new Date(initialData.date) : new Date();
     return d.toISOString().split("T")[0];
   });
+  // Track original timestamp to preserve intra-day ordering on edit
+  const originalDateTimestamp = useRef(initialData?.date ?? null);
+  const [dateManuallyChanged, setDateManuallyChanged] = useState(false);
   const [isFamily, setIsFamily] = useState(
     initialData?.isFamily !== undefined ? initialData.isFamily : false
   );
@@ -244,7 +247,11 @@ export default function TransactionForm({
       return;
     }
 
-    const dateTimestamp = new Date(dateStr).getTime();
+    // If date wasn't manually changed during edit, preserve original timestamp
+    // to maintain intra-day ordering
+    const dateTimestamp = (isEditing && !dateManuallyChanged && originalDateTimestamp.current)
+      ? originalDateTimestamp.current
+      : new Date(dateStr).getTime();
 
     if (isEditing && initialData?.id) {
       updateMutation.mutate({
@@ -407,7 +414,7 @@ export default function TransactionForm({
         <Input
           type="date"
           value={dateStr}
-          onChange={(e) => setDateStr(e.target.value)}
+          onChange={(e) => { setDateStr(e.target.value); setDateManuallyChanged(true); }}
           className="h-12"
         />
       </div>

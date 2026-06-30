@@ -256,7 +256,7 @@ export function registerWalletRoutes(app: Express) {
         const txCurrency = (currency || user.preferredCurrency || "EUR").toUpperCase();
         const description = card ? `${merchant} (${card})` : merchant;
 
-        // Save transaction
+        // Save transaction (default to family)
         const result = await createTransaction({
           userId: user.id,
           categoryId,
@@ -265,7 +265,7 @@ export function registerWalletRoutes(app: Express) {
           currency: txCurrency,
           description,
           date: txDate,
-          isFamily: false,
+          isFamily: true,
           familyGroupId: null,
           isWork: false,
           businessGroupId: null,
@@ -355,7 +355,7 @@ export function registerWalletRoutes(app: Express) {
           ? `${merchant} (${cardName})`
           : merchant;
 
-        // Save transaction
+        // Save transaction (default to family)
         const result = await createTransaction({
           userId: user.id,
           categoryId,
@@ -364,7 +364,7 @@ export function registerWalletRoutes(app: Express) {
           currency: currency.toUpperCase(),
           description,
           date: txDate,
-          isFamily: false,
+          isFamily: true,
           familyGroupId: null,
           isWork: false,
           businessGroupId: null,
