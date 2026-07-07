@@ -5,9 +5,12 @@ import { users, transactions, categories } from "../drizzle/schema";
 import {
   getDb,
   getCategories,
+  createCategory,
   createTransaction,
   findLearnedCategory,
   upsertCategoryRule,
+  getUserCategoryRules,
+  getBusinessGroups,
 } from "./db";
 import { invokeLLM } from "./_core/openai-llm";
 import { ENV } from "./_core/env";
@@ -204,6 +207,345 @@ async function categorizeTransaction(
 // ─── Register Routes ─────────────────────────────────────────────────────────
 
 export function registerWalletRoutes(app: Express) {
+  // ─── Siri Shortcuts Voice endpoint ────────────────────────────────────────────
+  app.get(
+    "/api/wallet/voice",
+    walletLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        console.log("[Wallet/Voice] Full URL:", req.originalUrl);
+
+        const token = req.query.token as string;
+        const rawText = req.query.text as string;
+
+        if (!token || token.length < 10) {
+          return res.status(401).json({ error: "Invalid token" });
+        }
+        if (!rawText || rawText.trim().length === 0) {
+          return res.status(400).json({ error: "Missing text parameter" });
+        }
+
+        // URL-decode and trim the text (Siri Shortcuts sends URL-encoded text)
+        const text = decodeURIComponent(rawText).trim();
+        console.log("[Wallet/Voice] Text:", text);
+
+        // Authenticate user by wallet token
+        const user = await getUserByWalletToken(token);
+        if (!user) {
+          return res.status(401).json({ error: "Invalid token" });
+        }
+
+        // Get user categories
+        const userCategories = await getCategories(user.id);
+        if (!userCategories || userCategories.length === 0) {
+          return res.status(500).json({ error: "No categories available" });
+        }
+
+        // Build category names list for LLM prompt
+        const categoryNames = Array.from(
+          new Set(userCategories.map((c) => normalizeCategoryNameToEnglish(c.name)).filter(Boolean))
+        ).map((name) => `"${name}"`).join(", ");
+
+        // Get user's learned category rules
+        const learnedRules = await getUserCategoryRules(user.id);
+        const userRulesPrompt = learnedRules.length > 0
+          ? learnedRules
+              .map((rule) => {
+                const category = userCategories.find((c) => c.id === rule.categoryId);
+                return category ? `"${rule.pattern}" → ${normalizeCategoryNameToEnglish(category.name)} (${rule.hitCount})` : null;
+              })
+              .filter(Boolean)
+              .join(", ")
+          : "(none)";
+
+        // Get business groups for work context
+        const userBusinessGroups = await getBusinessGroups(user.id);
+        const businessGroupNames = userBusinessGroups.length > 0
+          ? userBusinessGroups.map((g: any, i: number) => `${i + 1}. "${g.name}"`).join(", ")
+          : "(none)";
+
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const todayMs = now.getTime();
+        const preferredCurrency = user.preferredCurrency || "EUR";
+
+        // Parse with LLM (same prompt as voice.transcribeAndParse)
+        const llmResult = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `You are a financial transaction parser. Extract structured data from the user's text input.
+
+**CRITICAL: The user may dictate MULTIPLE transactions in a single message.** Each distinct expense/income mentioned should be a separate transaction in the array.
+
+Available categories (canonical English names): ${categoryNames}
+
+User's learned category preferences (description → category, usage count):
+${userRulesPrompt}
+These take priority over general rules when the description matches.
+
+CATEGORY LANGUAGE RULES:
+- ALWAYS return categoryName in English, regardless of the input language.
+- Match semantically across languages. For example, Russian "авто" must match "Auto", "еда" must match "Food".
+- If none of the available categories fits well, create a new short descriptive category name in English and set newCategoryEmoji.
+- Never return Russian, Azerbaijani, or mixed-language category names.
+
+**IMPORTANT — TODAY'S DATE: ${now.toISOString()} (year ${currentYear})**
+The current Unix timestamp in milliseconds is: ${todayMs}
+You MUST use the year ${currentYear} for all dates.
+
+User's preferred currency: ${preferredCurrency}
+
+Rules for EACH transaction:
+- Determine if it's income or expense from context
+- Match semantically to the closest available category name and return that categoryName in English
+- Extract the amount (number only)
+- Determine the currency from context clues:
+  * "манат" / "manat" / "AZN" → AZN
+  * "доллар" / "dollar" / "бакс" / "USD" → USD
+  * "евро" / "euro" / "EUR" → EUR
+  * "рубль" / "рублей" / "руб" / "RUB" → RUB
+  * "лира" / "TRY" → TRY
+  * "фунт" / "pound" / "GBP" → GBP
+  * "лари" / "GEL" → GEL
+  * "франк" / "CHF" → CHF
+  * If no currency mentioned, default to: ${preferredCurrency}
+- Create a short description
+- If no specific date mentioned, use today's timestamp: ${todayMs}
+- The date field MUST be a Unix timestamp in milliseconds in the year ${currentYear}
+- Detect the language of the text (ru, az, en)
+
+BUDGET CONTEXT DETECTION:
+User's default budget: ${(user as any).defaultBudget || "personal"}
+User's business workspaces: ${businessGroupNames}
+- WORK triggers: "рабочий", "рабочие", "для работы", "для компании", "компания", "бизнес", "клиент", "проект", "офис", "iş", "iş xərci", "şirkət", "biznes", "work", "business", "company", "client", "project", "office", "corporate".
+- FAMILY triggers: "семейный", "семья", "для семьи", "ailə", "ailə xərci", "family", "для жены", "для мужа", "для детей", "домой"
+- DEFAULT: If no work or family trigger → set budgetContext to "${(user as any).defaultBudget || "personal"}"
+
+CATEGORY MATCHING RULES:
+- Hotel minibar, hotel bar, hotel restaurant, room service → "Restaurants"
+- Any food or drink purchase (cafe, coffee, restaurant, bar) → "Restaurants"
+- Hotel room/accommodation/rent/apartment → "Housing"
+- Taxi, uber, bus, metro, train, flight → "Transport"
+- Cinema, concert, club, entertainment → "Entertainment"
+- Grocery store, supermarket, food market → "Food"
+- Pharmacy, doctor, clinic, medicine → "Health"
+- Clothing store, shoes, fashion → "Clothing"
+- Internet, phone plan, mobile top-up → "Communication"
+- Netflix, Spotify, app subscription → "Subscriptions"
+- Gift, present → "Gifts"
+- Salary, wage → "Salary"
+- Freelance work payment → "Freelance"
+- Stock, crypto, investment → "Investments"
+- Vet, pet care, pet food → "Pets" with emoji 🐾
+- Beauty salon, haircut, spa → "Beauty" with emoji 💅
+- Sports, gym, fitness → "Sports" with emoji 🏋️
+- Education, course, books → "Education" with emoji 📚
+- Charity, donation → "Charity" with emoji 🤝
+- Electronics, computer, gadgets → "Electronics" with emoji 💻
+- Car repair, car wash, parking, fuel → "Auto" with emoji 🚗
+
+NEW CATEGORY RULE: If the transaction does NOT match any existing category well, set categoryName to a NEW descriptive English name and set newCategoryEmoji to a single appropriate emoji.
+If the transaction DOES match an existing category, set newCategoryEmoji to empty string "".
+
+Always return a transactions array, even for a single transaction.`,
+            },
+            {
+              role: "user",
+              content: `Parse ALL transactions from this text: "${text}"`,
+            },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "parsed_transactions",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  language: { type: "string", description: "Detected language code (ru, az, en)" },
+                  transactions: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        type: { type: "string", enum: ["income", "expense"], description: "Transaction type" },
+                        amount: { type: "number", description: "Transaction amount" },
+                        currency: { type: "string", description: "Currency code" },
+                        categoryName: { type: "string", description: "English category name" },
+                        newCategoryEmoji: { type: "string", description: "Emoji for new category, or empty string" },
+                        description: { type: "string", description: "Short description" },
+                        date: { type: "number", description: "Unix timestamp in milliseconds" },
+                        budgetContext: { type: "string", enum: ["personal", "family", "work"], description: "Budget context" },
+                        businessGroupName: { type: "string", description: "Company name if work, else empty string" },
+                      },
+                      required: ["type", "amount", "currency", "categoryName", "newCategoryEmoji", "description", "date", "budgetContext", "businessGroupName"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["language", "transactions"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+
+        const content = llmResult.choices[0]?.message?.content;
+        if (!content || typeof content !== "string") {
+          return res.status(500).json({ error: "Failed to parse transaction from text" });
+        }
+
+        const parsed = JSON.parse(content) as {
+          language: string;
+          transactions: Array<{
+            type: "income" | "expense";
+            amount: number;
+            currency: string;
+            categoryName: string;
+            newCategoryEmoji: string;
+            description: string;
+            date: number;
+            budgetContext: "personal" | "family" | "work";
+            businessGroupName: string;
+          }>;
+        };
+
+        if (!parsed.transactions || parsed.transactions.length === 0) {
+          return res.status(400).json({ error: "Could not parse any transaction from text" });
+        }
+
+        // Process and save each transaction
+        const savedTransactions: Array<{
+          id: number | null;
+          type: string;
+          amount: string;
+          currency: string;
+          category: string;
+          description: string;
+        }> = [];
+
+        for (const tx of parsed.transactions) {
+          // Resolve category
+          let cat = findCategoryByCanonicalName(userCategories, tx.categoryName);
+
+          // Check learned rules
+          const learnedCategoryId = await findLearnedCategory(user.id, tx.description);
+          if (learnedCategoryId) {
+            const learnedCat = userCategories.find((c) => c.id === learnedCategoryId);
+            if (learnedCat) cat = learnedCat;
+          }
+
+          // Auto-create new category if needed
+          if (!cat && tx.newCategoryEmoji) {
+            const canonicalName = normalizeCategoryNameToEnglish(tx.categoryName);
+            console.log(`[Wallet/Voice] Auto-creating category: "${canonicalName}" ${tx.newCategoryEmoji}`);
+            const newCat = await createCategory({
+              name: canonicalName,
+              icon: tx.newCategoryEmoji || "📦",
+              color: "#6366f1",
+              type: "both",
+              isPreset: false,
+              userId: user.id,
+            });
+            if (newCat) {
+              cat = { ...newCat, name: canonicalName, icon: tx.newCategoryEmoji || "📦" } as any;
+            }
+          }
+
+          // Fallback to "Other" or last category
+          if (!cat) {
+            cat = findCategoryByCanonicalName(userCategories, "Other") || userCategories[userCategories.length - 1];
+          }
+
+          const categoryId = (cat as any).id;
+          const categoryName = (cat as any).name;
+
+          // Date validation
+          let fixedDate = tx.date;
+          if (fixedDate) {
+            const txDate = new Date(fixedDate);
+            const txYear = txDate.getFullYear();
+            if (txYear !== currentYear && txYear >= 2020 && txYear < currentYear) {
+              txDate.setFullYear(currentYear);
+              fixedDate = txDate.getTime();
+            }
+            if (fixedDate > todayMs + 86400000) {
+              fixedDate = todayMs;
+            }
+          } else {
+            fixedDate = todayMs;
+          }
+
+          // Determine budget flags — default to family for wallet transactions
+          const isFamily = tx.budgetContext === "family" || tx.budgetContext === "personal";
+          const isWork = tx.budgetContext === "work";
+          let businessGroupId: number | null = null;
+          if (isWork && tx.businessGroupName) {
+            const lower = tx.businessGroupName.toLowerCase();
+            const bg = userBusinessGroups.find((g: any) =>
+              g.name.toLowerCase() === lower ||
+              g.name.toLowerCase().includes(lower) ||
+              lower.includes(g.name.toLowerCase())
+            );
+            if (bg) businessGroupId = (bg as any).id;
+          }
+
+          // Save transaction
+          const result = await createTransaction({
+            userId: user.id,
+            categoryId,
+            type: tx.type,
+            amount: tx.amount.toFixed(2),
+            currency: tx.currency.toUpperCase(),
+            description: tx.description,
+            date: fixedDate,
+            isFamily,
+            familyGroupId: null,
+            isWork,
+            businessGroupId,
+            originalAmount: null,
+            originalCurrency: null,
+            exchangeRate: null,
+            sourceLanguage: parsed.language || null,
+            rawTranscription: text,
+          });
+
+          // Learn category rule
+          await upsertCategoryRule(user.id, tx.description, categoryId);
+
+          savedTransactions.push({
+            id: result?.id ?? null,
+            type: tx.type,
+            amount: tx.amount.toFixed(2),
+            currency: tx.currency.toUpperCase(),
+            category: categoryName,
+            description: tx.description,
+          });
+        }
+
+        // Send Telegram notification
+        if (user.telegramId) {
+          const lines = savedTransactions.map((t) =>
+            `${t.type === "income" ? "📥" : "📤"} ${t.description} ${t.amount} ${t.currency} → ${t.category}`
+          );
+          const notificationText = `🎙 Siri: ${text}\n\n${lines.join("\n")}`;
+          await sendTelegramNotification(user.telegramId, notificationText);
+        }
+
+        return res.status(200).json({
+          success: true,
+          text,
+          language: parsed.language,
+          transactions: savedTransactions,
+        });
+      } catch (err) {
+        console.error("[Wallet/Voice] Error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  );
+
   // ─── Simple GET endpoint (for iOS Shortcuts - just paste URL) ───────────────
   app.get(
     "/api/wallet/transaction",
