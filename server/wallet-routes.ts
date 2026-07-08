@@ -208,20 +208,21 @@ async function categorizeTransaction(
 
 export function registerWalletRoutes(app: Express) {
   // ─── Siri Shortcuts Voice endpoint ────────────────────────────────────────────
-  app.get(
-    "/api/wallet/voice",
-    walletLimiter,
-    async (req: Request, res: Response) => {
+  // Support both GET and POST for /api/wallet/voice
+  const voiceHandler = async (req: Request, res: Response) => {
       try {
+        console.log("[Wallet/Voice] Method:", req.method);
         console.log("[Wallet/Voice] Full URL:", req.originalUrl);
-        console.log("[Wallet/Voice] Raw query:", req.url);
+        console.log("[Wallet/Voice] Body:", JSON.stringify(req.body));
 
-        const token = req.query.token as string;
-        let rawText = req.query.text as string;
+        // Get token from query string or body
+        const token = (req.query.token as string) || req.body?.token;
 
-        // Fallback: if text is missing or too short, try to extract it from the raw URL
-        // iOS Shortcuts sometimes doesn't properly encode spaces, causing text to be split
-        if (!rawText || rawText.trim().length < 2) {
+        // Get text from body (POST) or query string (GET)
+        let rawText = req.body?.text || (req.query.text as string);
+
+        // Fallback for GET: if text is missing or too short, try to extract from raw URL
+        if ((!rawText || rawText.trim().length < 2) && req.method === 'GET') {
           const fullUrl = req.originalUrl || req.url;
           const textMatch = fullUrl.match(/[&?]text=(.+?)(?:&|$)/);
           if (textMatch) {
@@ -229,13 +230,12 @@ export function registerWalletRoutes(app: Express) {
           }
         }
 
-        // Another fallback: grab everything after &text= till end of URL
-        if (!rawText || rawText.trim().length < 2) {
+        // Another GET fallback: grab everything after &text= till end of URL
+        if ((!rawText || rawText.trim().length < 2) && req.method === 'GET') {
           const fullUrl = req.originalUrl || req.url;
           const textIdx = fullUrl.indexOf('text=');
           if (textIdx !== -1) {
             const afterText = fullUrl.substring(textIdx + 5);
-            // Remove any trailing query params that are known (token, etc)
             rawText = decodeURIComponent(afterText.replace(/\+/g, ' '));
           }
         }
@@ -247,8 +247,8 @@ export function registerWalletRoutes(app: Express) {
           return res.status(400).json({ error: "Missing text parameter" });
         }
 
-        // URL-decode and trim the text (Siri Shortcuts sends URL-encoded text)
-        const text = decodeURIComponent(rawText).trim();
+        // Decode and trim the text
+        const text = (req.method === 'GET' ? decodeURIComponent(rawText) : rawText).trim();
         console.log("[Wallet/Voice] Text:", text);
 
         // Authenticate user by wallet token
@@ -565,8 +565,10 @@ Always return a transactions array, even for a single transaction.`,
         console.error("[Wallet/Voice] Error:", err);
         return res.status(500).json({ error: "Internal server error" });
       }
-    }
-  );
+  };
+
+  app.get("/api/wallet/voice", walletLimiter, voiceHandler);
+  app.post("/api/wallet/voice", walletLimiter, voiceHandler);
 
   // ─── Simple GET endpoint (for iOS Shortcuts - just paste URL) ───────────────
   app.get(
