@@ -214,9 +214,31 @@ export function registerWalletRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         console.log("[Wallet/Voice] Full URL:", req.originalUrl);
+        console.log("[Wallet/Voice] Raw query:", req.url);
 
         const token = req.query.token as string;
-        const rawText = req.query.text as string;
+        let rawText = req.query.text as string;
+
+        // Fallback: if text is missing or too short, try to extract it from the raw URL
+        // iOS Shortcuts sometimes doesn't properly encode spaces, causing text to be split
+        if (!rawText || rawText.trim().length < 2) {
+          const fullUrl = req.originalUrl || req.url;
+          const textMatch = fullUrl.match(/[&?]text=(.+?)(?:&|$)/);
+          if (textMatch) {
+            rawText = decodeURIComponent(textMatch[1].replace(/\+/g, ' '));
+          }
+        }
+
+        // Another fallback: grab everything after &text= till end of URL
+        if (!rawText || rawText.trim().length < 2) {
+          const fullUrl = req.originalUrl || req.url;
+          const textIdx = fullUrl.indexOf('text=');
+          if (textIdx !== -1) {
+            const afterText = fullUrl.substring(textIdx + 5);
+            // Remove any trailing query params that are known (token, etc)
+            rawText = decodeURIComponent(afterText.replace(/\+/g, ' '));
+          }
+        }
 
         if (!token || token.length < 10) {
           return res.status(401).json({ error: "Invalid token" });
