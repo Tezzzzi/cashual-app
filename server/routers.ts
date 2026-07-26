@@ -345,11 +345,20 @@ const transactionsRouter = router({
       if (input.categoryId !== undefined) {
         const db = await getDb();
         if (db) {
-          const existing = await db
+          // Try own transaction first
+          let existing = await db
             .select({ id: transactions.id, categoryId: transactions.categoryId, description: transactions.description })
             .from(transactions)
             .where(and(eq(transactions.id, id), eq(transactions.userId, ctx.user.id)))
             .limit(1);
+          // If not found, try as family owner
+          if (existing.length === 0) {
+            existing = await db
+              .select({ id: transactions.id, categoryId: transactions.categoryId, description: transactions.description })
+              .from(transactions)
+              .where(eq(transactions.id, id))
+              .limit(1);
+          }
           existingTransaction = existing[0] ?? null;
         }
       }

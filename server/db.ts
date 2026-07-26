@@ -317,10 +317,41 @@ export async function updateTransaction(
   if (!db) return;
   // Normalize date to milliseconds if present
   const normalizedData = data.date ? { ...data, date: normalizeTimestampMs(data.date) } : data;
-  await db
+
+  // First try: update own transaction
+  const result = await db
     .update(transactions)
     .set(normalizedData)
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+
+  // If no rows affected, check if user is family group owner and can edit family member's transaction
+  if ((result as any)[0]?.affectedRows === 0) {
+    // Get family groups where this user is the owner
+    const ownedGroups = await db
+      .select({ id: familyGroups.id })
+      .from(familyGroups)
+      .where(eq(familyGroups.ownerId, userId));
+
+    if (ownedGroups.length > 0) {
+      const ownedGroupIds = ownedGroups.map(g => g.id);
+      // Get all family member userIds from owned groups
+      const members = await db
+        .select({ userId: familyGroupMembers.userId })
+        .from(familyGroupMembers)
+        .where(inArray(familyGroupMembers.familyGroupId, ownedGroupIds));
+      const familyUserIds = members.map(m => m.userId);
+
+      if (familyUserIds.length > 0) {
+        await db
+          .update(transactions)
+          .set(normalizedData)
+          .where(and(
+            eq(transactions.id, id),
+            inArray(transactions.userId, familyUserIds)
+          ));
+      }
+    }
+  }
 }
 
 function normalizeDescriptionPattern(description: string) {
@@ -394,9 +425,37 @@ export async function getUserCategoryRules(userId: number): Promise<Array<{ patt
 export async function deleteTransaction(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
-  await db
+
+  // First try: delete own transaction
+  const result = await db
     .delete(transactions)
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+
+  // If no rows affected, check if user is family group owner
+  if ((result as any)[0]?.affectedRows === 0) {
+    const ownedGroups = await db
+      .select({ id: familyGroups.id })
+      .from(familyGroups)
+      .where(eq(familyGroups.ownerId, userId));
+
+    if (ownedGroups.length > 0) {
+      const ownedGroupIds = ownedGroups.map(g => g.id);
+      const members = await db
+        .select({ userId: familyGroupMembers.userId })
+        .from(familyGroupMembers)
+        .where(inArray(familyGroupMembers.familyGroupId, ownedGroupIds));
+      const familyUserIds = members.map(m => m.userId);
+
+      if (familyUserIds.length > 0) {
+        await db
+          .delete(transactions)
+          .where(and(
+            eq(transactions.id, id),
+            inArray(transactions.userId, familyUserIds)
+          ));
+      }
+    }
+  }
 }
 
 // ─── Reports ─────────────────────────────────────────────────────────
