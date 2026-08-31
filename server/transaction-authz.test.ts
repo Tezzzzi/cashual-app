@@ -1,6 +1,9 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
-import { buildTransactionMutationFilter } from "./db";
+import {
+  buildTransactionMutationFilter,
+  buildMultiUserVisibilityFilter,
+} from "./db";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
@@ -73,6 +76,67 @@ describe("buildTransactionMutationFilter", () => {
     const { params } = compiledFilter(99, 42);
     expect(params).toContain(99);
     expect(params).toContain(42);
+  });
+});
+
+/** Compiled multi-user visibility predicate, normalized the same way. */
+function compiledVisibility(userIds: number[], familyGroupId?: number) {
+  const filter = buildMultiUserVisibilityFilter(
+    CALLER_ID,
+    userIds,
+    familyGroupId
+  );
+  const query = new MySqlDialect().sqlToQuery(filter!);
+  return {
+    sql: query.sql.toLowerCase().replace(/`/g, ""),
+    params: query.params,
+  };
+}
+
+describe("buildMultiUserVisibilityFilter", () => {
+  const MEMBER_ID = 4;
+
+  it("shows only family rows of other members", () => {
+    const { sql } = compiledVisibility([CALLER_ID, MEMBER_ID]);
+    // The other-members branch must always carry the isFamily restriction, so a
+    // member's personal spending never surfaces in a shared family view.
+    expect(sql).toContain("transactions.isfamily = ?");
+    expect(sql).toContain("transactions.userid in (?)");
+  });
+
+  it("still shows the caller's own rows in full", () => {
+    const { sql } = compiledVisibility([CALLER_ID, MEMBER_ID]);
+    // Own branch is unrestricted: personal + family, joined by OR.
+    expect(sql).toContain("transactions.userid = ?");
+    expect(sql).toContain(" or ");
+  });
+
+  it("pins other members' rows to the requested family group", () => {
+    const { sql, params } = compiledVisibility([CALLER_ID, MEMBER_ID], 1);
+    expect(sql).toContain("transactions.familygroupid = ?");
+    expect(params).toContain(1);
+  });
+
+  it('omits the own-rows branch for scope="partner"', () => {
+    // scope="partner" passes only the other members, so no OR branch should
+    // appear and the isFamily restriction must still apply.
+    const { sql } = compiledVisibility([MEMBER_ID]);
+    expect(sql).toContain("transactions.isfamily = ?");
+    expect(sql).not.toContain(" or ");
+  });
+
+  it("collapses to own rows only when no other members are requested", () => {
+    const { sql } = compiledVisibility([CALLER_ID]);
+    expect(sql).toContain("transactions.userid = ?");
+    expect(sql).not.toContain("transactions.isfamily");
+  });
+
+  it("never returns a bare userId filter when other members are involved", () => {
+    // Regression guard: the original code filtered on userId IN (...) alone,
+    // which leaked other members' personal transactions into family reports,
+    // list views and the AI advisor context.
+    const { sql } = compiledVisibility([CALLER_ID, MEMBER_ID]);
+    expect(sql).toContain("isfamily");
   });
 });
 

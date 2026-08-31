@@ -234,6 +234,44 @@ export function normalizeTimestampMs(ts: number): number {
 }
 
 // ─── Transactions ────────────────────────────────────────────────────
+
+/**
+ * Visibility predicate for multi-user (family) reads.
+ *
+ * The caller sees every row of their own, but only **family-budget** rows
+ * (`isFamily = true`) of other people: a member's personal spending stays
+ * private even inside shared family lists, reports and the AI advisor context.
+ * When `familyGroupId` is supplied, other members' rows are additionally pinned
+ * to that group.
+ *
+ * Previously the multi-user branch filtered on `userId IN (...)` alone, which
+ * meant the "partner"/"all together" family views returned members' personal
+ * transactions in full — amount, category and description.
+ */
+export function buildMultiUserVisibilityFilter(
+  callerId: number,
+  userIds: number[],
+  familyGroupId?: number
+) {
+  const otherIds = userIds.filter(id => id !== callerId);
+  const ownRows = eq(transactions.userId, callerId);
+
+  if (otherIds.length === 0) return ownRows;
+
+  const otherConditions = [
+    inArray(transactions.userId, otherIds),
+    eq(transactions.isFamily, true),
+  ];
+  if (familyGroupId) {
+    otherConditions.push(eq(transactions.familyGroupId, familyGroupId));
+  }
+  const otherRows = and(...otherConditions);
+
+  // scope="partner" excludes the caller, so only add the own-rows branch when
+  // the caller was actually asked for.
+  return userIds.includes(callerId) ? or(ownRows, otherRows) : otherRows;
+}
+
 export async function getTransactions(
   userId: number,
   opts?: {
@@ -256,8 +294,10 @@ export async function getTransactions(
   const conditions = [];
 
   if (opts?.userIds && opts.userIds.length > 0) {
-    // Multi-user family query: filter by specific user IDs
-    conditions.push(inArray(transactions.userId, opts.userIds));
+    // Multi-user family query: own rows in full, others' family rows only.
+    conditions.push(
+      buildMultiUserVisibilityFilter(userId, opts.userIds, opts.familyGroupId)
+    );
   } else if (opts?.familyGroupId) {
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
     conditions.push(eq(transactions.isFamily, true));
@@ -479,8 +519,10 @@ export async function getReportSummary(
   const conditions = [];
 
   if (opts?.userIds && opts.userIds.length > 0) {
-    // Family shared reports: filter by specific user IDs (shows ALL their transactions)
-    conditions.push(inArray(transactions.userId, opts.userIds));
+    // Family shared reports: own rows in full, others' family rows only.
+    conditions.push(
+      buildMultiUserVisibilityFilter(userId, opts.userIds, opts.familyGroupId)
+    );
   } else if (opts?.familyGroupId) {
     // Filter by specific family group (all members, family-tagged only)
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
@@ -532,8 +574,10 @@ export async function getReportByCategory(
   const conditions = [];
 
   if (opts?.userIds && opts.userIds.length > 0) {
-    // Family shared reports: filter by specific user IDs (shows ALL their transactions)
-    conditions.push(inArray(transactions.userId, opts.userIds));
+    // Family shared reports: own rows in full, others' family rows only.
+    conditions.push(
+      buildMultiUserVisibilityFilter(userId, opts.userIds, opts.familyGroupId)
+    );
   } else if (opts?.familyGroupId) {
     // Filter by specific family group (all members, family-tagged only)
     conditions.push(eq(transactions.familyGroupId, opts.familyGroupId));
