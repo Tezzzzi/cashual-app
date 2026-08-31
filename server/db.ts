@@ -308,50 +308,84 @@ export async function createTransaction(data: InsertTransaction) {
   return result;
 }
 
+/**
+ * Single source of truth for "may this user mutate this transaction?".
+ *
+ * Authorized when either:
+ *   1. the caller owns the row (`transactions.userId = userId`), or
+ *   2. the row is a family-budget row (`isFamily = true`) whose `familyGroupId`
+ *      points at a group the caller *owns*, AND whose author is a member of
+ *      that same group.
+ *
+ * Both family conditions are correlated against the row's own `familyGroupId`
+ * rather than a pre-fetched list of ids, so a caller who owns several groups
+ * cannot reach a member of group A through group B. Authorizing on
+ * `transactions.userId` alone — as the previous two-step fallback did — let a
+ * group owner mutate a member's personal and work rows, and rows belonging to
+ * an entirely different group.
+ *
+ * `isWork` is deliberately not consulted: it is an orthogonal tag, and a row
+ * with `isFamily = true` belongs to the family budget whether or not it is also
+ * tagged as work.
+ */
+export function buildTransactionMutationFilter(id: number, userId: number) {
+  return and(
+    eq(transactions.id, id),
+    or(
+      eq(transactions.userId, userId),
+      and(
+        eq(transactions.isFamily, true),
+        sql`${transactions.familyGroupId} IS NOT NULL`,
+        sql`EXISTS (SELECT 1 FROM ${familyGroups} WHERE ${familyGroups.id} = ${transactions.familyGroupId} AND ${familyGroups.ownerId} = ${userId})`,
+        sql`EXISTS (SELECT 1 FROM ${familyGroupMembers} WHERE ${familyGroupMembers.familyGroupId} = ${transactions.familyGroupId} AND ${familyGroupMembers.userId} = ${transactions.userId})`
+      )
+    )
+  );
+}
+
+/**
+ * Fetches a transaction only if the caller is allowed to mutate it, using the
+ * exact same predicate as the write. Callers needing a pre-image (e.g. category
+ * learning) must go through this rather than looking the row up by `id`, which
+ * would expose any user's transaction to anyone who guesses an id.
+ */
+export async function getTransactionForMutation(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({
+      id: transactions.id,
+      categoryId: transactions.categoryId,
+      description: transactions.description,
+    })
+    .from(transactions)
+    .where(buildTransactionMutationFilter(id, userId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Returns true when the caller was authorized for the row, false otherwise. */
 export async function updateTransaction(
   id: number,
   userId: number,
   data: Partial<InsertTransaction>
-) {
+): Promise<boolean> {
   const db = await getDb();
-  if (!db) return;
+  if (!db) return false;
   // Normalize date to milliseconds if present
   const normalizedData = data.date ? { ...data, date: normalizeTimestampMs(data.date) } : data;
 
-  // First try: update own transaction
   const result = await db
     .update(transactions)
     .set(normalizedData)
-    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+    .where(buildTransactionMutationFilter(id, userId));
 
-  // If no rows affected, check if user is family group owner and can edit family member's transaction
-  if ((result as any)[0]?.affectedRows === 0) {
-    // Get family groups where this user is the owner
-    const ownedGroups = await db
-      .select({ id: familyGroups.id })
-      .from(familyGroups)
-      .where(eq(familyGroups.ownerId, userId));
+  if (((result as any)[0]?.affectedRows ?? 0) > 0) return true;
 
-    if (ownedGroups.length > 0) {
-      const ownedGroupIds = ownedGroups.map(g => g.id);
-      // Get all family member userIds from owned groups
-      const members = await db
-        .select({ userId: familyGroupMembers.userId })
-        .from(familyGroupMembers)
-        .where(inArray(familyGroupMembers.familyGroupId, ownedGroupIds));
-      const familyUserIds = members.map(m => m.userId);
-
-      if (familyUserIds.length > 0) {
-        await db
-          .update(transactions)
-          .set(normalizedData)
-          .where(and(
-            eq(transactions.id, id),
-            inArray(transactions.userId, familyUserIds)
-          ));
-      }
-    }
-  }
+  // MySQL reports 0 affected rows both when nothing matched *and* when the row
+  // matched but every value was already identical. Re-check with the same
+  // predicate so an unchanged-value edit is not misreported as forbidden.
+  return (await getTransactionForMutation(id, userId)) !== null;
 }
 
 function normalizeDescriptionPattern(description: string) {
@@ -422,40 +456,16 @@ export async function getUserCategoryRules(userId: number): Promise<Array<{ patt
   }));
 }
 
-export async function deleteTransaction(id: number, userId: number) {
+/** Returns true when a row was actually deleted, false when unauthorized/missing. */
+export async function deleteTransaction(id: number, userId: number): Promise<boolean> {
   const db = await getDb();
-  if (!db) return;
+  if (!db) return false;
 
-  // First try: delete own transaction
   const result = await db
     .delete(transactions)
-    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+    .where(buildTransactionMutationFilter(id, userId));
 
-  // If no rows affected, check if user is family group owner
-  if ((result as any)[0]?.affectedRows === 0) {
-    const ownedGroups = await db
-      .select({ id: familyGroups.id })
-      .from(familyGroups)
-      .where(eq(familyGroups.ownerId, userId));
-
-    if (ownedGroups.length > 0) {
-      const ownedGroupIds = ownedGroups.map(g => g.id);
-      const members = await db
-        .select({ userId: familyGroupMembers.userId })
-        .from(familyGroupMembers)
-        .where(inArray(familyGroupMembers.familyGroupId, ownedGroupIds));
-      const familyUserIds = members.map(m => m.userId);
-
-      if (familyUserIds.length > 0) {
-        await db
-          .delete(transactions)
-          .where(and(
-            eq(transactions.id, id),
-            inArray(transactions.userId, familyUserIds)
-          ));
-      }
-    }
-  }
+  return ((result as any)[0]?.affectedRows ?? 0) > 0;
 }
 
 // ─── Reports ─────────────────────────────────────────────────────────

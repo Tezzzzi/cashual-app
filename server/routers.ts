@@ -14,6 +14,7 @@ import {
   createTransaction,
   updateTransaction,
   deleteTransaction,
+  getTransactionForMutation,
   getReportSummary,
   getReportByCategory,
   createFamilyGroup,
@@ -341,26 +342,13 @@ const transactionsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      let existingTransaction: { id: number; categoryId: number; description: string | null } | null = null;
-      if (input.categoryId !== undefined) {
-        const db = await getDb();
-        if (db) {
-          // Try own transaction first
-          let existing = await db
-            .select({ id: transactions.id, categoryId: transactions.categoryId, description: transactions.description })
-            .from(transactions)
-            .where(and(eq(transactions.id, id), eq(transactions.userId, ctx.user.id)))
-            .limit(1);
-          // If not found, try as family owner
-          if (existing.length === 0) {
-            existing = await db
-              .select({ id: transactions.id, categoryId: transactions.categoryId, description: transactions.description })
-              .from(transactions)
-              .where(eq(transactions.id, id))
-              .limit(1);
-          }
-          existingTransaction = existing[0] ?? null;
-        }
+      // Authorize before touching anything, and reuse the same predicate as the
+      // write. Looking the row up by `id` alone previously let any caller read a
+      // stranger's description and seed a category rule from it.
+      const existingTransaction = await getTransactionForMutation(id, ctx.user.id);
+      if (!existingTransaction) {
+        // NOT_FOUND rather than FORBIDDEN: do not disclose that the id exists.
+        throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
       }
 
       // Normalize: if isWork is explicitly set to false, clear businessGroupId
@@ -394,11 +382,14 @@ const transactionsRouter = router({
         }
       }
 
-      await updateTransaction(id, ctx.user.id, updateData as any);
+      const updated = await updateTransaction(id, ctx.user.id, updateData as any);
+      if (!updated) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
+      }
 
+      // Only learn from a write that actually landed.
       if (
         input.categoryId !== undefined &&
-        existingTransaction &&
         existingTransaction.categoryId !== input.categoryId
       ) {
         const ruleDescription = (input.description ?? existingTransaction.description ?? "").trim();
@@ -420,7 +411,10 @@ const transactionsRouter = router({
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      await deleteTransaction(input.id, ctx.user.id);
+      const deleted = await deleteTransaction(input.id, ctx.user.id);
+      if (!deleted) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
+      }
       return { success: true };
     }),
 });
