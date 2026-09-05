@@ -13,8 +13,11 @@ RUN npm install -g pnpm@10.4.1
 COPY package.json pnpm-lock.yaml ./
 COPY patches/ ./patches/
 
-# Install dependencies (allow lockfile updates to prevent CI failures)
-RUN pnpm install --no-frozen-lockfile
+# Install dependencies exactly as locked. If this ever fails, the lockfile has
+# drifted from package.json — regenerate it in its own commit rather than
+# reintroducing --no-frozen-lockfile, which lets production build a dependency
+# tree that was never tested.
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
