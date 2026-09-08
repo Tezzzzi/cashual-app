@@ -127,6 +127,15 @@ async function startServer() {
     })
   );
 
+  // Unknown /api/* paths must 404 rather than fall through to the SPA catch-all,
+  // which answers 200 with index.html for anything. That made every API path
+  // look healthy: an uptime monitor pointed at /api/ready would report success
+  // even if the route did not exist or the server were serving only static
+  // files. Registered after all real API routes, before serveStatic.
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ error: "Not found" });
+  });
+
   // In production, serve static files. In dev, Vite is loaded separately.
   if (process.env.NODE_ENV !== "development") {
     serveStatic(app);
