@@ -13,6 +13,7 @@ import { createContext } from "./context";
 import { serveStatic } from "./static";
 import { startReminderScheduler } from "../reminders";
 import { registerBackupRoute, startDailyBackupScheduler } from "../backup";
+import { registerHealthRoutes } from "../health";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -112,6 +113,10 @@ async function startServer() {
 
   // Admin SQL backup download route
   registerBackupRoute(app);
+
+  // Liveness / readiness probes — readiness verifies schema, not just the
+  // connection, so schema drift surfaces as 503 instead of a silent 200.
+  registerHealthRoutes(app);
 
   // tRPC API
   app.use(

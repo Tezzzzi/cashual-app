@@ -8,6 +8,7 @@ import {
   bigint,
   boolean,
   decimal,
+  uniqueIndex,
 } from "drizzle-orm/mysql-core";
 
 // ─── Users ───────────────────────────────────────────────────────────
@@ -56,15 +57,25 @@ export type Category = typeof categories.$inferSelect;
 export type InsertCategory = typeof categories.$inferInsert;
 
 // ─── Category Learning Rules ─────────────────────────────────────────
-export const categoryRules = mysqlTable("category_rules", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  descriptionPattern: varchar("descriptionPattern", { length: 255 }).notNull(),
-  categoryId: int("categoryId").notNull(),
-  hitCount: int("hitCount").notNull().default(1),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const categoryRules = mysqlTable(
+  "category_rules",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    descriptionPattern: varchar("descriptionPattern", { length: 255 }).notNull(),
+    categoryId: int("categoryId").notNull(),
+    hitCount: int("hitCount").notNull().default(1),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  // Required for upsertCategoryRule's ON DUPLICATE KEY UPDATE to fire at all.
+  (table) => ({
+    userPattern: uniqueIndex("category_rules_userId_pattern_unique").on(
+      table.userId,
+      table.descriptionPattern
+    ),
+  })
+);
 
 export type CategoryRule = typeof categoryRules.$inferSelect;
 export type InsertCategoryRule = typeof categoryRules.$inferInsert;
@@ -123,12 +134,23 @@ export type FamilyGroup = typeof familyGroups.$inferSelect;
 export type InsertFamilyGroup = typeof familyGroups.$inferInsert;
 
 // ─── Family Group Members ────────────────────────────────────────────
-export const familyGroupMembers = mysqlTable("familyGroupMembers", {
-  id: int("id").autoincrement().primaryKey(),
-  familyGroupId: int("familyGroupId").notNull(),
-  userId: int("userId").notNull(),
-  joinedAt: timestamp("joinedAt").defaultNow().notNull(),
-});
+export const familyGroupMembers = mysqlTable(
+  "familyGroupMembers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    familyGroupId: int("familyGroupId").notNull(),
+    userId: int("userId").notNull(),
+    joinedAt: timestamp("joinedAt").defaultNow().notNull(),
+  },
+  // A user must not be able to join the same group twice: duplicate membership
+  // would double-count them in family reports and in authorization checks.
+  (table) => ({
+    groupUser: uniqueIndex("familyGroupMembers_group_user_unique").on(
+      table.familyGroupId,
+      table.userId
+    ),
+  })
+);
 
 export type FamilyGroupMember = typeof familyGroupMembers.$inferSelect;
 export type InsertFamilyGroupMember = typeof familyGroupMembers.$inferInsert;

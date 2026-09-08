@@ -65,14 +65,17 @@ async function ensureColumn(conn, tableName, columnName, addColumnSql) {
 }
 
 async function ensureUniqueIndex(conn, tableName, indexName, columnName) {
+  // columnName accepts a single column or an array for a composite index.
+  const columns = Array.isArray(columnName) ? columnName : [columnName];
   if (!(await tableExists(conn, tableName))) return;
   if (await indexExists(conn, tableName, indexName)) {
     migrationLog(`Unique index ${indexName} already exists on ${tableName}.`);
     return;
   }
   try {
-    migrationLog(`Adding missing unique index ${indexName} on ${tableName}.${columnName}.`);
-    await conn.execute(`ALTER TABLE \`${tableName}\` ADD UNIQUE INDEX \`${indexName}\` (\`${columnName}\`)`);
+    migrationLog(`Adding missing unique index ${indexName} on ${tableName}.${columns.join(', ')}.`);
+    const columnList = columns.map((c) => `\`${c}\``).join(', ');
+    await conn.execute(`ALTER TABLE \`${tableName}\` ADD UNIQUE INDEX \`${indexName}\` (${columnList})`);
   } catch (err) {
     migrationWarn(
       `Could not add unique index ${indexName}; leaving table unchanged. This is non-fatal and usually means duplicate historical values exist.`,
@@ -247,6 +250,10 @@ async function runAdditiveMigrations() {
       ['users', 'createdAt', 'ALTER TABLE `users` ADD `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP'],
       ['users', 'updatedAt', 'ALTER TABLE `users` ADD `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'],
       ['users', 'lastSignedIn', 'ALTER TABLE `users` ADD `lastSignedIn` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP'],
+      // Was missing from this list while present in drizzle/schema.ts, so every
+      // query selecting users failed with ER_BAD_FIELD_ERROR and the Mini App
+      // reported "Authentication failed". See drizzle/0007_add_wallet_token.sql.
+      ['users', 'walletToken', 'ALTER TABLE `users` ADD `walletToken` varchar(64) NULL DEFAULT NULL'],
 
       ['categories', 'icon', "ALTER TABLE `categories` ADD `icon` varchar(64) NOT NULL DEFAULT '📦'"],
       ['categories', 'color', "ALTER TABLE `categories` ADD `color` varchar(32) NOT NULL DEFAULT '#6366f1'"],
@@ -313,6 +320,19 @@ async function runAdditiveMigrations() {
     await ensureUniqueIndex(conn, 'users', 'users_openId_unique', 'openId');
     await ensureUniqueIndex(conn, 'users', 'users_telegramId_unique', 'telegramId');
     await ensureUniqueIndex(conn, 'familyGroups', 'familyGroups_inviteCode_unique', 'inviteCode');
+    // upsertCategoryRule relies on INSERT ... ON DUPLICATE KEY UPDATE, which
+    // silently degrades to a plain INSERT without a matching unique key: rules
+    // accumulated duplicates and hitCount never incremented. Non-fatal if
+    // historical duplicates block it — the warning path below covers that.
+    await ensureUniqueIndex(conn, 'category_rules', 'category_rules_userId_pattern_unique', [
+      'userId',
+      'descriptionPattern',
+    ]);
+    // Prevents a member being joined to the same family group twice.
+    await ensureUniqueIndex(conn, 'familyGroupMembers', 'familyGroupMembers_group_user_unique', [
+      'familyGroupId',
+      'userId',
+    ]);
 
     migrationLog('Additive-only schema checks complete.');
   } finally {
