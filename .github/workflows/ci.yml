@@ -1,0 +1,45 @@
+name: CI
+
+# Nothing ran automatically before this: the 2026-09-04 build failure was only
+# discovered when production went down. Run the same gates on every PR so a
+# broken build is caught before it can remove a working deployment.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.20.2
+
+      # Pinned to the version in package.json's packageManager field. Installing
+      # pnpm unpinned is what broke the production build on 2026-09-04.
+      - name: Install pnpm
+        run: npm install -g pnpm@10.4.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # The Dockerfile is the actual production build path, so a green pnpm
+      # build is not sufficient evidence: verify the image builds on linux-x64.
+      - name: Build production image
+        run: docker build -t cashual:ci .

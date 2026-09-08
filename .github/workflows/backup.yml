@@ -1,0 +1,146 @@
+name: Database backup
+
+# Replaces the in-process scheduler in server/backup.ts, which was not a
+# scheduler at all: it kept a setTimeout and the dump in the app's memory, so a
+# backup was skipped whenever the app was down — including the 24 hours around
+# the 2026-09-04 data loss — and the copy died with the process anyway.
+#
+# Runs outside the application and outside Railway on purpose. The incident was
+# triggered by a billing lapse at the Railway account level, so a copy stored on
+# that same account would not have survived either.
+
+on:
+  schedule:
+    # 03:15 UTC daily, matching the cadence the old in-process job intended.
+    - cron: "15 3 * * *"
+  workflow_dispatch: # manual run, e.g. before a migration
+
+concurrency:
+  # Never let two dumps overlap.
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      # Throwaway MySQL used to prove the dump actually restores. A dump that
+      # has never been restored is not a backup.
+      verify:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: verify
+          MYSQL_DATABASE: verify
+        ports: ["3307:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -pverify"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install client tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mysql-client
+
+      - name: Dump production (consistent snapshot)
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          # --single-transaction takes an InnoDB-consistent snapshot without
+          # locking writes. The previous hand-rolled exporter read tables with
+          # plain SELECTs in a loop, so concurrent writes could produce an
+          # internally inconsistent dump.
+          python3 - <<'PY' > /tmp/conn.env
+          import os, urllib.parse as u
+          d = u.urlparse(os.environ["PROD_DATABASE_URL"])
+          print(f"MYSQL_HOST={d.hostname}")
+          print(f"MYSQL_PORT={d.port or 3306}")
+          print(f"MYSQL_USER={u.unquote(d.username)}")
+          print(f"MYSQL_PWD={u.unquote(d.password)}")
+          print(f"MYSQL_DB={d.path.lstrip('/')}")
+          PY
+          set -a; . /tmp/conn.env; set +a
+          mysqldump \
+            --host="$MYSQL_HOST" --port="$MYSQL_PORT" \
+            --user="$MYSQL_USER" --password="$MYSQL_PWD" \
+            --single-transaction --routines --triggers --events \
+            --set-gtid-purged=OFF \
+            "$MYSQL_DB" > /tmp/backup.sql
+          echo "dump bytes: $(stat -c%s /tmp/backup.sql)"
+          test -s /tmp/backup.sql
+
+      - name: Record source row counts
+        run: |
+          set -euo pipefail
+          set -a; . /tmp/conn.env; set +a
+          mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" \
+                --user="$MYSQL_USER" --password="$MYSQL_PWD" \
+                --batch --skip-column-names -e "
+            SELECT CONCAT(table_name,':',table_rows)
+            FROM information_schema.tables
+            WHERE table_schema='$MYSQL_DB' ORDER BY table_name;
+          " > /tmp/source_tables.txt
+          cat /tmp/source_tables.txt
+
+      - name: Verify by restoring into a clean database
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -P 3307 -uroot -pverify verify < /tmp/backup.sql
+          # Compare the table inventory, and require exact row counts per table.
+          set -a; . /tmp/conn.env; set +a
+          for t in $(mysql -h 127.0.0.1 -P 3307 -uroot -pverify --batch --skip-column-names \
+                     -e "SELECT table_name FROM information_schema.tables WHERE table_schema='verify' ORDER BY table_name"); do
+            src=$(mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" \
+                  --password="$MYSQL_PWD" --batch --skip-column-names \
+                  -e "SELECT COUNT(*) FROM \`$MYSQL_DB\`.\`$t\`")
+            dst=$(mysql -h 127.0.0.1 -P 3307 -uroot -pverify --batch --skip-column-names \
+                  -e "SELECT COUNT(*) FROM verify.\`$t\`")
+            echo "$t: source=$src restored=$dst"
+            if [ "$src" != "$dst" ]; then
+              echo "::error::row count mismatch in $t ($src vs $dst)"; exit 1
+            fi
+          done
+          echo "restore verified"
+
+      - name: Encrypt and upload to R2
+        env:
+          PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          KEY="cashual/$(date -u +%Y/%m/%d)/cashual-$(date -u +%Y%m%dT%H%M%SZ).sql.gz.gpg"
+          # Symmetric AES256, passphrase via file descriptor so it never appears
+          # in the process list or the workflow log.
+          gzip -c /tmp/backup.sql \
+            | gpg --batch --yes --symmetric --cipher-algo AES256 \
+                  --passphrase-fd 3 -o /tmp/backup.gpg 3<<<"$PASSPHRASE"
+          test -s /tmp/backup.gpg
+          aws s3 cp /tmp/backup.gpg "s3://$R2_BUCKET/$KEY" --endpoint-url "$R2_ENDPOINT"
+          # Confirm the object exists remotely with a non-zero size, rather than
+          # trusting the exit code of the upload alone.
+          aws s3api head-object --bucket "$R2_BUCKET" --key "$KEY" \
+            --endpoint-url "$R2_ENDPOINT" --query ContentLength --output text | tee /tmp/remote_size
+          test "$(cat /tmp/remote_size)" -gt 0
+          echo "uploaded $KEY"
+
+      - name: Alert on failure
+        if: failure()
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_ALERT_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+        run: |
+          # A backup that fails silently is worse than no backup, because it
+          # buys false confidence.
+          curl -sS -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
+            -d "chat_id=$CHAT" \
+            -d "text=Cashual: DATABASE BACKUP FAILED — run ${{ github.run_id }}. No verified copy was stored today." \
+            > /dev/null
