@@ -937,7 +937,10 @@ Always return a transactions array, even for a single receipt (array with one it
             },
           },
         },
-      });
+      },
+      // Image input: resolved as the "vision" task so the provider for receipt
+      // recognition can be selected independently of plain text parsing.
+      "vision");
 
       const content = llmResult.choices[0]?.message?.content;
       if (!content || typeof content !== "string") {

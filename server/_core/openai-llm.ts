@@ -1,4 +1,9 @@
-import { ENV } from "./env";
+import {
+  chatEndpoint,
+  resolveProvider,
+  type Provider,
+  type Task,
+} from "./ai-provider";
 
 export type Role = "system" | "user" | "assistant";
 
@@ -46,45 +51,21 @@ export type InvokeResult = {
 };
 
 /**
- * Get the LLM API URL - prefer Forge API, fall back to OpenAI
+ * Build the request for a task, choosing the provider and its model together.
+ *
+ * Exported for tests: asserting on the built request is the only way to catch
+ * a provider/model mismatch without spending money on a live call.
  */
-function getLLMApiUrl(): string {
-  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
-    const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
-    return `${baseUrl}v1/chat/completions`;
-  }
-  return "https://api.openai.com/v1/chat/completions";
-}
-
-/**
- * Get the API key - prefer Forge API key, fall back to OpenAI key
- */
-function getLLMApiKey(): string | null {
-  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
-    return ENV.forgeApiKey;
-  }
-  if (ENV.openaiApiKey) {
-    return ENV.openaiApiKey;
-  }
-  return null;
-}
-
-/**
- * Call LLM API - uses Forge API if available, falls back to OpenAI
- */
-export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  const apiKey = getLLMApiKey();
-  const apiUrl = getLLMApiUrl();
-
-  if (!apiKey) {
-    console.error("[LLM] No API credentials available. forgeApiUrl:", !!ENV.forgeApiUrl, "forgeApiKey:", !!ENV.forgeApiKey, "openaiApiKey:", !!ENV.openaiApiKey);
-    throw new Error("No LLM API credentials configured (neither BUILT_IN_FORGE_API_KEY nor OPENAI_API_KEY)");
-  }
-
-  console.log(`[LLM] Calling ${apiUrl}`);
+export function buildChatRequest(
+  params: InvokeParams,
+  task: Task = "chat",
+  requested?: string | null
+): { url: string; apiKey: string; provider: Provider; payload: Record<string, unknown> } {
+  const provider = resolveProvider(task, requested);
+  const { url, model, apiKey } = chatEndpoint(provider);
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model,
     messages: params.messages,
     max_tokens: params.max_tokens || 4096,
   };
@@ -92,6 +73,22 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   if (params.response_format) {
     payload.response_format = params.response_format;
   }
+
+  return { url, apiKey, provider, payload };
+}
+
+/**
+ * Call the chat/vision model. `task` picks the per-task default ("vision" for
+ * image input) and `requested` carries the user's in-app choice.
+ */
+export async function invokeLLM(
+  params: InvokeParams,
+  task: Task = "chat",
+  requested?: string | null
+): Promise<InvokeResult> {
+  const { url: apiUrl, apiKey, provider, payload } = buildChatRequest(params, task, requested);
+
+  console.log(`[LLM] provider=${provider} model=${payload.model} url=${apiUrl}`);
 
   const response = await fetch(apiUrl, {
     method: "POST",

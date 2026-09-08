@@ -17,4 +17,16 @@ export const ENV = {
   // Telegram & OpenAI
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? process.env.BOT_TOKEN ?? "",
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
+  // ─── AI providers ─────────────────────────────────────────────────
+  // Two independent providers, selectable per task so their output can be
+  // compared. Models are overridable without a code change because vendors
+  // rename them; see server/_core/ai-provider.ts for the defaults.
+  xaiApiKey: process.env.XAI_API_KEY ?? "",
+  xaiChatModel: process.env.XAI_CHAT_MODEL ?? "",
+  forgeChatModel: process.env.FORGE_CHAT_MODEL ?? "",
+  // Defaults when the caller expresses no preference: per task, then global.
+  aiProviderStt: process.env.AI_PROVIDER_STT ?? "",
+  aiProviderChat: process.env.AI_PROVIDER_CHAT ?? "",
+  aiProviderVision: process.env.AI_PROVIDER_VISION ?? "",
+  aiProviderDefault: process.env.AI_PROVIDER_DEFAULT ?? "",
 };

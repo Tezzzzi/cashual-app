@@ -1,4 +1,11 @@
-import { ENV } from "./env";
+import {
+  isConfigured,
+  PROVIDERS,
+  resolveProvider,
+  sttEndpoint,
+  supportsSttLanguage,
+  type Provider,
+} from "./ai-provider";
 
 export type TranscribeOptions = {
   audioBuffer: Buffer;
@@ -18,25 +25,91 @@ export type TranscriptionError = {
 };
 
 /**
- * Transcribe audio to text using the Forge API (Whisper-compatible endpoint)
- * Falls back to OpenAI API if OPENAI_API_KEY is set and Forge API is not available.
+ * Assemble the multipart body for a provider's speech endpoint.
+ *
+ * The two dialects differ in more than the URL:
+ *  - openai/Forge: `model` is required, `prompt` biases recognition, field order
+ *    is irrelevant.
+ *  - xAI /v1/stt: takes **no** `model` field, has no `prompt` (it uses repeatable
+ *    `keyterm` instead), and its docs require every option field to precede
+ *    `file` in the body. FormData preserves append order, so `file` goes last.
+ *
+ * Exported for tests: the field set and ordering are the part most likely to
+ * break silently against a live endpoint.
+ */
+export function buildSttForm(
+  options: TranscribeOptions,
+  dialect: "xai" | "openai",
+  model: string | null
+): FormData {
+  const formData = new FormData();
+  const mimeType = options.mimeType || "audio/webm";
+  const ext = getFileExtension(mimeType);
+  const audioBlob = new Blob([new Uint8Array(options.audioBuffer)], { type: mimeType });
+
+  if (dialect === "xai") {
+    if (options.language) {
+      formData.append("language", options.language);
+      // Inverse text normalization ("сто манат" → "100 AZN") needs `language`.
+      formData.append("format", "true");
+    }
+    for (const term of ["manat", "AZN", "EUR", "USD"]) {
+      formData.append("keyterm", term);
+    }
+    formData.append("file", audioBlob, `audio.${ext}`); // must be last
+    return formData;
+  }
+
+  formData.append("file", audioBlob, `audio.${ext}`);
+  if (model) formData.append("model", model);
+  if (options.language) formData.append("language", options.language);
+  formData.append(
+    "prompt",
+    options.language === "ru"
+      ? "Это финансовая транзакция. Распознай сумму, категорию и описание."
+      : options.language === "az"
+        ? "Bu maliyyə əməliyyatıdır. Məbləğ, kateqoriya və təsviri tanı."
+        : "This is a financial transaction. Recognize the amount, category, and description."
+  );
+  return formData;
+}
+
+/**
+ * Transcribe audio. `requested` carries the user's in-app provider choice.
+ *
+ * Azerbaijani is not among the 25 languages xAI documents for speech, so an
+ * `az` request is routed to a provider that covers it rather than silently
+ * degrading. See supportsSttLanguage in ai-provider.ts.
  */
 export async function transcribeAudio(
-  options: TranscribeOptions
+  options: TranscribeOptions,
+  requested?: string | null
 ): Promise<WhisperResponse | TranscriptionError> {
   try {
-    // Determine which API to use
-    const apiUrl = getTranscriptionApiUrl();
-    const apiKey = getTranscriptionApiKey();
-
-    if (!apiUrl || !apiKey) {
-      console.error("[Whisper] No API credentials available. forgeApiUrl:", !!ENV.forgeApiUrl, "forgeApiKey:", !!ENV.forgeApiKey, "openaiApiKey:", !!ENV.openaiApiKey);
+    let provider: Provider;
+    try {
+      provider = resolveProvider("stt", requested);
+      if (!supportsSttLanguage(provider, options.language)) {
+        const alternative = PROVIDERS.find(
+          (p) => p !== provider && isConfigured(p, "stt") && supportsSttLanguage(p, options.language)
+        );
+        if (alternative) {
+          console.log(
+            `[STT] ${provider} does not list "${options.language}"; using ${alternative} instead`
+          );
+          provider = alternative;
+        }
+      }
+    } catch {
+      console.error("[STT] No speech provider configured");
       return {
         error: "Transcription service is not configured",
         code: "SERVICE_ERROR",
-        details: "Neither BUILT_IN_FORGE_API_URL nor OPENAI_API_KEY is set",
+        details: "No AI provider has speech credentials configured",
       };
     }
+
+    const { url: apiUrl, model, dialect, apiKey } = sttEndpoint(provider);
 
     // Check file size (16MB limit)
     const sizeMB = options.audioBuffer.length / (1024 * 1024);
@@ -48,31 +121,11 @@ export async function transcribeAudio(
       };
     }
 
-    console.log(`[Whisper] Transcribing ${sizeMB.toFixed(2)}MB audio via ${apiUrl}`);
+    console.log(
+      `[STT] provider=${provider} dialect=${dialect} size=${sizeMB.toFixed(2)}MB url=${apiUrl}`
+    );
 
-    // Create FormData for multipart upload
-    const formData = new FormData();
-
-    // Convert Buffer to Blob
-    const mimeType = options.mimeType || "audio/webm";
-    const ext = getFileExtension(mimeType);
-    const audioBlob = new Blob([new Uint8Array(options.audioBuffer)], { type: mimeType });
-    formData.append("file", audioBlob, `audio.${ext}`);
-
-    formData.append("model", "whisper-1");
-    
-    if (options.language) {
-      formData.append("language", options.language);
-    }
-
-    const prompt =
-      options.language === "ru"
-        ? "Это финансовая транзакция. Распознай сумму, категорию и описание."
-        : options.language === "az"
-          ? "Bu maliyyə əməliyyatıdır. Məbləğ, kateqoriya və təsviri tanı."
-          : "This is a financial transaction. Recognize the amount, category, and description.";
-
-    formData.append("prompt", prompt);
+    const formData = buildSttForm(options, dialect, model);
 
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -93,11 +146,13 @@ export async function transcribeAudio(
       };
     }
 
+    // Both dialects return { text, language }. xAI adds duration/words, which
+    // are ignored, and reports language as BCP-47 ("es-mx"), so keep only the
+    // primary subtag — the rest of the app works with "ru"/"az"/"en".
     const result = (await response.json()) as { text: string; language?: string };
-    console.log(`[Whisper] Transcription successful: "${result.text.substring(0, 50)}..."`);
+    console.log(`[STT] provider=${provider} text="${result.text.substring(0, 50)}..."`);
 
-    // Detect language from the transcription
-    const detectedLanguage = result.language || options.language || "ru";
+    const detectedLanguage = normalizeLanguageTag(result.language) || options.language || "ru";
 
     return {
       text: result.text,
@@ -113,31 +168,10 @@ export async function transcribeAudio(
   }
 }
 
-/**
- * Get the transcription API URL - prefer Forge API, fall back to OpenAI
- */
-function getTranscriptionApiUrl(): string | null {
-  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
-    const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
-    return `${baseUrl}v1/audio/transcriptions`;
-  }
-  if (ENV.openaiApiKey) {
-    return "https://api.openai.com/v1/audio/transcriptions";
-  }
-  return null;
-}
-
-/**
- * Get the API key - prefer Forge API key, fall back to OpenAI key
- */
-function getTranscriptionApiKey(): string | null {
-  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
-    return ENV.forgeApiKey;
-  }
-  if (ENV.openaiApiKey) {
-    return ENV.openaiApiKey;
-  }
-  return null;
+/** "es-mx" → "es"; empty/undefined stays empty so callers can fall back. */
+export function normalizeLanguageTag(tag?: string): string {
+  if (!tag) return "";
+  return tag.trim().toLowerCase().split(/[-_]/)[0] ?? "";
 }
 
 /**
