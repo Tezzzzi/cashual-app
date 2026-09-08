@@ -320,15 +320,12 @@ async function runAdditiveMigrations() {
     await ensureUniqueIndex(conn, 'users', 'users_openId_unique', 'openId');
     await ensureUniqueIndex(conn, 'users', 'users_telegramId_unique', 'telegramId');
     await ensureUniqueIndex(conn, 'familyGroups', 'familyGroups_inviteCode_unique', 'inviteCode');
-    // upsertCategoryRule relies on INSERT ... ON DUPLICATE KEY UPDATE, which
-    // silently degrades to a plain INSERT without a matching unique key: rules
-    // accumulated duplicates and hitCount never incremented. Non-fatal if
-    // historical duplicates block it — the warning path below covers that.
-    await ensureUniqueIndex(conn, 'category_rules', 'category_rules_userId_pattern_unique', [
-      'userId',
-      'descriptionPattern',
-    ]);
-    // Prevents a member being joined to the same family group twice.
+    // category_rules already carries UNIQUE KEY `unique_user_pattern` from its
+    // CREATE TABLE above, which is what upsertCategoryRule's ON DUPLICATE KEY
+    // UPDATE matches on. Nothing to add here.
+    //
+    // Prevents a member being joined to the same family group twice: this table's
+    // CREATE TABLE has no such key, so duplicates were possible.
     await ensureUniqueIndex(conn, 'familyGroupMembers', 'familyGroupMembers_group_user_unique', [
       'familyGroupId',
       'userId',

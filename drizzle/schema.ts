@@ -68,9 +68,12 @@ export const categoryRules = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  // Required for upsertCategoryRule's ON DUPLICATE KEY UPDATE to fire at all.
+  // Declares the constraint that already exists in the database, created by the
+  // CREATE TABLE in start.mjs. upsertCategoryRule's ON DUPLICATE KEY UPDATE
+  // matches on it; the name must stay `unique_user_pattern` so schema and
+  // database do not drift into two redundant indexes.
   (table) => ({
-    userPattern: uniqueIndex("category_rules_userId_pattern_unique").on(
+    userPattern: uniqueIndex("unique_user_pattern").on(
       table.userId,
       table.descriptionPattern
     ),
