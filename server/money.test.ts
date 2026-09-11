@@ -126,3 +126,48 @@ describe("sumBuckets", () => {
     expect((await sumBuckets([], "EUR")).total).toBe(0);
   });
 });
+
+describe("batched conversion", () => {
+  it("looks a rate up once for many rows sharing a currency and day", async () => {
+    // A naive Promise.all fired one request per row, so 50 same-day rows meant
+    // 50 identical HTTP calls, each able to stall the list for its timeout.
+    const spy = vi.mocked(rates.tryGetExchangeRate);
+    spy.mockClear();
+    const rows = Array.from({ length: 20 }, () => ({
+      amount: "10",
+      currency: "AZN",
+      date: DAY,
+    }));
+    const out = await toDisplayAmounts(rows, "EUR");
+    expect(out).toHaveLength(20);
+    expect(out.every((d) => d.amount === 5)).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("needs no rate at all when rows are already in the display currency", async () => {
+    const spy = vi.mocked(rates.tryGetExchangeRate);
+    spy.mockClear();
+    await toDisplayAmounts(
+      [
+        { amount: "10", currency: "EUR", date: DAY },
+        { amount: "50", currency: "AZN", date: DAY, originalAmount: "25", originalCurrency: "EUR" },
+      ],
+      "EUR"
+    );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("keeps per-row results aligned with their input order", async () => {
+    const out = await toDisplayAmounts(
+      [
+        { amount: "50", currency: "AZN", date: DAY }, // 25 EUR
+        { amount: "10", currency: "EUR", date: DAY }, // 10 EUR
+        { amount: "70", currency: "GBP", date: DAY }, // no rate
+      ],
+      "EUR"
+    );
+    expect(out[0]).toMatchObject({ amount: 25, currency: "EUR" });
+    expect(out[1]).toMatchObject({ amount: 10, currency: "EUR" });
+    expect(out[2]).toMatchObject({ amount: 70, currency: "GBP", converted: false });
+  });
+});

@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { createHash } from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { eq } from "drizzle-orm";
 import { users, transactions, categories } from "../drizzle/schema";
@@ -53,6 +54,19 @@ function parseAmountString(raw: string | undefined): number {
   // Remove any remaining non-numeric chars except dot and minus
   cleaned = cleaned.replace(/[^0-9.\-]/g, "");
   return parseFloat(cleaned);
+}
+
+/**
+ * A short, non-reversible fingerprint of a wallet token, safe to log.
+ *
+ * The token authenticates the webhook outright, so logging it — or even a
+ * prefix of it — hands anyone with log access the ability to post transactions
+ * as that user. A truncated hash is enough to tell two callers apart and to
+ * confirm "the Shortcut is sending *a* token", which is all the logs need.
+ */
+function tokenFingerprint(token?: string | null): string {
+  if (!token) return "none";
+  return `sha:${createHash("sha256").update(token).digest("hex").slice(0, 8)}`;
 }
 
 async function getUserByWalletToken(token: string) {
@@ -211,9 +225,16 @@ export function registerWalletRoutes(app: Express) {
   // Support both GET and POST for /api/wallet/voice
   const voiceHandler = async (req: Request, res: Response) => {
       try {
-        console.log("[Wallet/Voice] Method:", req.method);
-        console.log("[Wallet/Voice] Full URL:", req.originalUrl);
-        console.log("[Wallet/Voice] Body:", JSON.stringify(req.body));
+        // Never log the URL, raw query string or full body: the wallet token
+        // travels in all three, and anyone able to read the deployment logs
+        // could then post transactions as this user. Log the path without its
+        // query, and a short fingerprint that is enough to correlate requests
+        // without being usable as a credential.
+        console.log(
+          `[Wallet/Voice] ${req.method} ${req.path} token=${tokenFingerprint(
+            (req.query.token as string) || req.body?.token
+          )} bodyKeys=${Object.keys(req.body ?? {}).join(",") || "-"}`
+        );
 
         // Get token from query string or body
         const token = (req.query.token as string) || req.body?.token;
@@ -576,18 +597,22 @@ Always return a transactions array, even for a single transaction.`,
     walletLimiter,
     async (req: Request, res: Response) => {
       try {
-        // Log the full raw URL for debugging
-        console.log("[Wallet] Full URL:", req.originalUrl);
-        console.log("[Wallet] Raw query string:", req.url.split("?")[1]);
-
         // All params come from URL query string
         const { token, amount, merchant, currency, date, card } = req.query as Record<string, string>;
+
+        // The token is a query parameter here, so neither originalUrl nor the
+        // raw query string may be logged — see tokenFingerprint.
+        console.log(
+          `[Wallet] GET ${req.path} token=${tokenFingerprint(token)} params=${Object.keys(req.query).join(",")}`
+        );
 
         if (!token || token.length < 10) {
           return res.status(401).json({ error: "Invalid token" });
         }
 
-        console.log("[Wallet] Parsed params:", { token: token?.slice(0, 8) + "...", amount, merchant, currency, date, card });
+        // `token.slice(0, 8)` was still eight usable characters of a live
+        // credential; the fingerprint is a hash, not a prefix.
+        console.log("[Wallet] Parsed params:", { amount, merchant, currency, date, card });
 
         const numAmount = parseAmountString(amount);
         if (!amount || isNaN(numAmount) || numAmount <= 0) {

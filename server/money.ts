@@ -89,11 +89,64 @@ export async function toDisplayAmount(
   };
 }
 
+/**
+ * Convert a list, looking each rate up once per currency and day.
+ *
+ * A naive `Promise.all(rows.map(toDisplayAmount))` had every row miss the rate
+ * cache simultaneously — 50 transactions from the same day produced 50
+ * identical HTTP requests, each able to stall the list for its 8s timeout.
+ * Rows needing no lookup (same currency, or an original already in the display
+ * currency) are resolved directly.
+ */
 export async function toDisplayAmounts(
   rows: MoneyRow[],
   displayCurrency: string
 ): Promise<DisplayAmount[]> {
-  return Promise.all(rows.map((r) => toDisplayAmount(r, displayCurrency)));
+  const display = displayCurrency.toUpperCase();
+  const results = new Array<DisplayAmount>(rows.length);
+  const needsRate = new Map<string, number[]>(); // "CUR:YYYY-MM-DD" -> row indexes
+
+  rows.forEach((row, i) => {
+    const stored = (row.currency || display).toUpperCase();
+    const originalCurrency = (row.originalCurrency || "").toUpperCase();
+
+    if (stored === display) {
+      results[i] = { amount: round2(num(row.amount)), currency: display, converted: true, exact: true };
+    } else if (originalCurrency === display && row.originalAmount != null) {
+      results[i] = {
+        amount: round2(num(row.originalAmount)),
+        currency: display,
+        converted: true,
+        exact: true,
+      };
+    } else {
+      const key = `${stored}:${dayKey(row.date)}`;
+      const bucket = needsRate.get(key);
+      if (bucket) bucket.push(i);
+      else needsRate.set(key, [i]);
+    }
+  });
+
+  await Promise.all(
+    Array.from(needsRate.entries()).map(async ([key, indexes]) => {
+      const stored = key.split(":")[0] ?? display;
+      const rate = await tryGetExchangeRate(stored, display, rows[indexes[0]!]!.date);
+      for (const i of indexes) {
+        const row = rows[i]!;
+        results[i] =
+          rate === null
+            ? { amount: round2(num(row.amount)), currency: stored, converted: false, exact: true }
+            : {
+                amount: round2(num(row.amount) * rate),
+                currency: display,
+                converted: true,
+                exact: false,
+              };
+      }
+    })
+  );
+
+  return results;
 }
 
 /** One bucket of pre-aggregated money, as produced by a GROUP BY in SQL. */

@@ -307,6 +307,15 @@ export default function Home() {
           <p className="text-lg text-white/50 font-medium mt-1">
             {user?.preferredCurrency || "AZN"}
           </p>
+          {(summary as any)?.partial && (
+            // Some amounts had no exchange rate and were left out of the total.
+            // Showing an understated figure as if it were complete is worse
+            // than admitting the gap — this is a finance app.
+            <p className="text-[11px] text-amber-200/90 mt-1">
+              ⚠ Итог неполный: часть сумм не удалось перевести в{" "}
+              {user?.preferredCurrency || "AZN"}
+            </p>
+          )}
 
           <div className="flex gap-8 mt-8">
             <div className="flex items-center gap-3">

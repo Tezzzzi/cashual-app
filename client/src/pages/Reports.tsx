@@ -309,6 +309,14 @@ export default function Reports() {
     currentMonthCategoriesLoading ||
     previousMonthCategoriesLoading;
 
+  // A month whose total is missing unconvertible amounts cannot be compared
+  // against another: the percentage would describe the gap in the data, not a
+  // change in spending.
+  const summaryPartial = Boolean((summary as any)?.partial);
+  const trendsPartial =
+    Boolean((currentMonthSummary as any)?.partial) ||
+    Boolean((previousMonthSummary as any)?.partial);
+
   const trendData = useMemo(() => {
     const categories = new Map<
       string,
@@ -549,6 +557,17 @@ export default function Reports() {
         </div>
       )}
 
+      {summaryPartial && (
+        // The server dropped amounts it could not convert; saying so is the
+        // difference between an honest gap and a silently understated total.
+        <div className="tg-card border border-amber-500/40 bg-amber-500/10">
+          <p className="text-[11px] text-amber-600">
+            ⚠ Итоги неполные: для части транзакций не удалось получить курс, и
+            они не вошли в суммы ниже
+          </p>
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-2">
         <div className="tg-card text-center">
@@ -598,6 +617,12 @@ export default function Reports() {
           <div className={`flex items-center gap-1 text-sm font-bold ${totalExpenseTrendClass}`}>
             {trendsLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : trendsPartial ? (
+              // Suppress the percentage rather than compare two months where at
+              // least one is missing amounts that had no exchange rate.
+              <span className="text-muted-foreground font-normal text-[11px]">
+                сравнение недоступно
+              </span>
             ) : (
               <>
                 {totalExpenseTrend === "increased" ? (
@@ -610,6 +635,13 @@ export default function Reports() {
             )}
           </div>
         </div>
+
+        {trendsPartial && (
+          <p className="text-[11px] text-amber-600">
+            ⚠ Часть сумм не удалось перевести в валюту отображения — итоги за
+            месяц неполные, проценты скрыты
+          </p>
+        )}
 
         {trendsLoading ? (
           <div className="flex justify-center py-8">
