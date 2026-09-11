@@ -152,7 +152,9 @@ export default function Transactions() {
       groups[groups.length - 1].items.push(t_item);
       // Sum up expenses for the day
       if (t_item.transaction.type === "expense") {
-        groups[groups.length - 1].dayTotal += Number(t_item.transaction.amount) || 0;
+        // Converted figure: raw amounts from different currencies are not addable.
+        groups[groups.length - 1].dayTotal +=
+          Number((t_item as any).display?.amount ?? t_item.transaction.amount) || 0;
       }
     }
     return groups;
@@ -172,34 +174,33 @@ export default function Transactions() {
     { key: "all", label: t("scope_all") },
   ];
 
-  // Helper: format amount with dual currency display
-  const formatAmount = (txn: any) => {
-    const mainAmount = parseFloat(txn.amount).toLocaleString("ru-RU", {
-      minimumFractionDigits: 2,
-    });
+  // `display` is the server-converted figure, derived from the row's own stored
+  // currency. Pairing txn.amount with userCurrency relabels history instead of
+  // converting it, which is how a 50 AZN expense became "50 EUR".
+  const formatAmount = (txn: any, display?: any) => {
+    const shownAmount = display ? display.amount : parseFloat(txn.amount);
+    const shownCurrency = display ? display.currency : txn.currency || userCurrency;
+    const mainAmount = shownAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 });
     const sign = txn.type === "income" ? "+" : "-";
     const origAmount = txn.originalAmount ? parseFloat(txn.originalAmount) : null;
     const origCurrency = txn.originalCurrency;
-
-    // Show dual display if original currency differs from user's default
-    if (origAmount && origCurrency && origCurrency.toUpperCase() !== userCurrency.toUpperCase()) {
-      const origFormatted = origAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 });
-      return (
-        <div className="text-right">
-          <p className={`text-sm font-semibold ${txn.type === "income" ? "text-income" : "text-expense"}`}>
-            {sign}{mainAmount} {userCurrency}
-          </p>
-          <p className="text-[10px] text-muted-foreground">
-            {sign}{origFormatted} {origCurrency}
-          </p>
-        </div>
-      );
-    }
+    const showOriginal =
+      origAmount && origCurrency && origCurrency.toUpperCase() !== shownCurrency.toUpperCase();
 
     return (
-      <p className={`text-sm font-semibold ${txn.type === "income" ? "text-income" : "text-expense"}`}>
-        {sign}{mainAmount}
-      </p>
+      <div className="text-right">
+        <p className={`text-sm font-semibold ${txn.type === "income" ? "text-income" : "text-expense"}`}>
+          {sign}{mainAmount} {shownCurrency}
+        </p>
+        {showOriginal && (
+          <p className="text-[10px] text-muted-foreground">
+            {sign}{origAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} {origCurrency}
+          </p>
+        )}
+        {display && display.converted === false && (
+          <p className="text-[10px] text-muted-foreground">≈ курс недоступен</p>
+        )}
+      </div>
     );
   };
 
@@ -363,7 +364,7 @@ export default function Transactions() {
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <div className="mr-1">
-                          {formatAmount(t_item.transaction)}
+                          {formatAmount(t_item.transaction, (t_item as any).display)}
                         </div>
                         <Button
                           variant="ghost"

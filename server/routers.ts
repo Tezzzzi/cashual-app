@@ -3,6 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
+import { toDisplayAmounts } from "./money";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import {
@@ -248,6 +249,7 @@ const transactionsRouter = router({
       }
 
       // Handle family scope filtering (same logic as reports)
+      let rows;
       if (input?.scope && input.scope !== "mine" && input?.familyGroupId) {
         const viewableIds = await getViewableUserIds(input.familyGroupId, ctx.user.id);
         let userIds: number[];
@@ -258,10 +260,21 @@ const transactionsRouter = router({
           userIds = Array.from(new Set([ctx.user.id, ...viewableIds]));
         }
         if (userIds.length === 0) userIds = [ctx.user.id];
-        return getTransactions(ctx.user.id, { ...input, userIds });
+        rows = await getTransactions(ctx.user.id, { ...input, userIds });
+      } else {
+        rows = await getTransactions(ctx.user.id, input ?? undefined);
       }
 
-      return getTransactions(ctx.user.id, input ?? undefined);
+      // Attach the amount converted into the user's current display currency.
+      // The client must render this rather than pairing the stored number with
+      // whatever currency is currently preferred — doing that turned a 50 AZN
+      // expense into "50 EUR" the moment the setting changed.
+      const display = ctx.user.preferredCurrency || "AZN";
+      const amounts = await toDisplayAmounts(
+        rows.map((r) => r.transaction),
+        display
+      );
+      return rows.map((row, i) => ({ ...row, display: amounts[i] }));
     }),
 
   create: protectedProcedure
@@ -1227,7 +1240,13 @@ const reportsRouter = router({
           userIds = viewableIds;
         }
       }
-      return getReportSummary(ctx.user.id, { ...input, userIds });
+      // Totals are returned in the user's current display currency; rows stored
+      // in another currency are converted at their own date's rate.
+      return getReportSummary(
+        ctx.user.id,
+        { ...input, userIds },
+        ctx.user.preferredCurrency || "AZN"
+      );
     }),
 
   byCategory: protectedProcedure
@@ -1260,7 +1279,11 @@ const reportsRouter = router({
           userIds = viewableIds;
         }
       }
-      return getReportByCategory(ctx.user.id, { ...input, userIds });
+      return getReportByCategory(
+        ctx.user.id,
+        { ...input, userIds },
+        ctx.user.preferredCurrency || "AZN"
+      );
     }),
 
   // Debug endpoint to inspect raw transaction dates

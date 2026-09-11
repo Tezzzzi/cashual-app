@@ -18,6 +18,7 @@ import {
   type InsertBusinessGroup,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { sumBuckets, type MoneyBucket } from "./money";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -511,10 +512,20 @@ export async function deleteTransaction(id: number, userId: number): Promise<boo
 // ─── Reports ─────────────────────────────────────────────────────────
 export async function getReportSummary(
   userId: number,
-  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; userIds?: number[]; isWork?: boolean; businessGroupId?: number }
+  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; userIds?: number[]; isWork?: boolean; businessGroupId?: number },
+  /** Currency the totals are returned in. Rows stored in other currencies are converted. */
+  displayCurrency = "AZN"
 ) {
   const db = await getDb();
-  if (!db) return { totalIncome: 0, totalExpense: 0, balance: 0 };
+  if (!db) {
+    return {
+      totalIncome: 0,
+      totalExpense: 0,
+      balance: 0,
+      currency: displayCurrency.toUpperCase(),
+      partial: false,
+    };
+  }
 
   const conditions = [];
 
@@ -545,28 +556,58 @@ export async function getReportSummary(
     conditions.push(eq(transactions.isWork, false));
   }
 
+  // Grouped by currency and day, not just type: summing `amount` across rows
+  // stored in different currencies added AZN to EUR as bare numbers. Each
+  // bucket is converted at its own day's rate so the total equals the sum of
+  // the transactions it is made of.
   const result = await db
     .select({
       type: transactions.type,
+      currency: transactions.currency,
+      day: sql<string>`DATE(FROM_UNIXTIME(${transactions.date} / 1000))`,
+      dayMs: sql<string>`CAST(MIN(${transactions.date}) AS CHAR)`,
       total: sql<string>`CAST(SUM(${transactions.amount}) AS CHAR)`,
     })
     .from(transactions)
     .where(and(...conditions))
-    .groupBy(transactions.type);
+    .groupBy(transactions.type, transactions.currency, sql`3`);
 
-  let totalIncome = 0;
-  let totalExpense = 0;
-  for (const row of result) {
-    if (row.type === "income") totalIncome = parseFloat(row.total || "0");
-    if (row.type === "expense") totalExpense = parseFloat(row.total || "0");
+  const display = (displayCurrency || "AZN").toUpperCase();
+  const income = result.filter((r) => r.type === "income");
+  const expense = result.filter((r) => r.type === "expense");
+
+  const toBuckets = (rows: typeof result): MoneyBucket[] =>
+    rows.map((r) => ({
+      total: r.total,
+      currency: r.currency,
+      date: parseInt(r.dayMs || "0", 10),
+    }));
+
+  const incomeSum = await sumBuckets(toBuckets(income), display);
+  const expenseSum = await sumBuckets(toBuckets(expense), display);
+  const unconvertible = [...incomeSum.unconvertible, ...expenseSum.unconvertible];
+
+  if (unconvertible.length > 0) {
+    console.warn(
+      `[reports] ${unconvertible.length} bucket(s) had no rate to ${display}; total is partial`
+    );
   }
 
-  return { totalIncome, totalExpense, balance: totalIncome - totalExpense };
+  return {
+    totalIncome: incomeSum.total,
+    totalExpense: expenseSum.total,
+    balance: Math.round((incomeSum.total - expenseSum.total) * 100) / 100,
+    currency: display,
+    /** True when some amounts could not be converted and are missing from the totals. */
+    partial: unconvertible.length > 0,
+  };
 }
 
 export async function getReportByCategory(
   userId: number,
-  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; type?: "income" | "expense"; userIds?: number[]; isWork?: boolean; businessGroupId?: number; }
+  opts?: { startDate?: number; endDate?: number; familyGroupId?: number; type?: "income" | "expense"; userIds?: number[]; isWork?: boolean; businessGroupId?: number; },
+  /** Currency the per-category totals are returned in. */
+  displayCurrency = "AZN"
 ) {
   const db = await getDb();
   if (!db) return [];
@@ -600,20 +641,64 @@ export async function getReportByCategory(
   } else if (opts?.isWork === false) {
     conditions.push(eq(transactions.isWork, false));
   }
-  return db
+  // Split by currency and day as well, then convert each bucket — otherwise a
+  // category holding both AZN and EUR rows reported their bare numeric sum.
+  const rows = await db
     .select({
       categoryId: transactions.categoryId,
       categoryName: categories.name,
       categoryIcon: categories.icon,
       categoryColor: categories.color,
+      currency: transactions.currency,
+      dayMs: sql<string>`CAST(MIN(${transactions.date}) AS CHAR)`,
       total: sql<string>`CAST(SUM(${transactions.amount}) AS CHAR)`,
       count: sql<number>`COUNT(*)`,
     })
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(and(...conditions))
-    .groupBy(transactions.categoryId, categories.name, categories.icon, categories.color)
-    .orderBy(desc(sql`SUM(${transactions.amount})`));
+    .groupBy(
+      transactions.categoryId,
+      categories.name,
+      categories.icon,
+      categories.color,
+      transactions.currency,
+      sql`DATE(FROM_UNIXTIME(${transactions.date} / 1000))`
+    );
+
+  const display = (displayCurrency || "AZN").toUpperCase();
+
+  // Re-aggregate the per-currency/day buckets back into one row per category.
+  const byCategory = new Map<number, { meta: (typeof rows)[number]; buckets: MoneyBucket[]; count: number }>();
+  for (const row of rows) {
+    const key = row.categoryId;
+    const entry = byCategory.get(key) ?? { meta: row, buckets: [], count: 0 };
+    entry.buckets.push({
+      total: row.total,
+      currency: row.currency,
+      date: parseInt(row.dayMs || "0", 10),
+    });
+    entry.count += Number(row.count) || 0;
+    byCategory.set(key, entry);
+  }
+
+  const result = [];
+  for (const [categoryId, entry] of Array.from(byCategory.entries())) {
+    const { total, unconvertible } = await sumBuckets(entry.buckets, display);
+    result.push({
+      categoryId,
+      categoryName: entry.meta.categoryName,
+      categoryIcon: entry.meta.categoryIcon,
+      categoryColor: entry.meta.categoryColor,
+      total: total.toFixed(2),
+      count: entry.count,
+      currency: display,
+      partial: unconvertible.length > 0,
+    });
+  }
+
+  // Ordering moved out of SQL: the sortable figure only exists after conversion.
+  return result.sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
 }
 
 export async function getReportByPeriod(

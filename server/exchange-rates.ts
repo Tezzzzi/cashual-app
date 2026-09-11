@@ -153,6 +153,47 @@ export async function getExchangeRate(
 }
 
 /**
+ * Strict variant: returns null instead of pretending the rate is 1.0.
+ *
+ * `getExchangeRate` falls back to 1.0 when every lookup fails, which silently
+ * asserts that 50 AZN equals 50 EUR. That is acceptable nowhere, but it is
+ * especially wrong when rendering stored history: the display would repeat the
+ * very bug this exists to prevent. Callers that show numbers to a user must use
+ * this and handle null by showing the amount in its own currency instead.
+ */
+export async function tryGetExchangeRate(
+  fromCurrency: string,
+  toCurrency: string,
+  date?: Date | number
+): Promise<number | null> {
+  const from = fromCurrency.toUpperCase();
+  const to = toCurrency.toUpperCase();
+  if (from === to) return 1.0;
+
+  try {
+    let dateStr: string | undefined;
+    if (date) {
+      const d = typeof date === "number" ? new Date(date) : date;
+      dateStr = d.toISOString().split("T")[0];
+    }
+
+    const rates = await fetchRates(from, dateStr);
+    const direct = rates[to.toLowerCase()];
+    if (direct && direct > 0) return direct;
+
+    const reverse = (await fetchRates(to, dateStr))[from.toLowerCase()];
+    if (reverse && reverse > 0) return 1 / reverse;
+
+    const fromUsd = (await fetchRates(from, dateStr))["usd"];
+    const usdTo = (await fetchRates("usd", dateStr))[to.toLowerCase()];
+    if (fromUsd && usdTo) return fromUsd * usdTo;
+  } catch (err) {
+    console.error(`[exchange-rates] ${from}→${to} lookup failed:`, err);
+  }
+  return null;
+}
+
+/**
  * Convert an amount from one currency to another.
  * @returns { convertedAmount, exchangeRate }
  */

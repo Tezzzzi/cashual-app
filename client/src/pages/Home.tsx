@@ -109,38 +109,46 @@ export default function Home() {
       }
       groups[groups.length - 1].items.push(t_item);
       if (t_item.transaction.type === "expense") {
-        groups[groups.length - 1].dayTotal += Number(t_item.transaction.amount) || 0;
+        // Use the converted figure: adding raw amounts summed AZN and EUR rows
+        // together as bare numbers once the display currency changed.
+        groups[groups.length - 1].dayTotal +=
+          Number((t_item as any).display?.amount ?? t_item.transaction.amount) || 0;
       }
     }
     return groups;
   }, [recentTxns, t]);
 
-  const formatAmount = (txn: any) => {
-    const mainAmount = parseFloat(txn.amount).toLocaleString("ru-RU", {
-      minimumFractionDigits: 2,
-    });
+  // `display` comes from the server already converted into the user's current
+  // currency, from each row's own stored currency. Never pair txn.amount with
+  // userCurrency: the stored number is denominated in whatever was preferred
+  // when it was recorded, so relabelling it turned 50 AZN into "50 EUR".
+  const formatAmount = (txn: any, display?: any) => {
+    const shownAmount = display ? display.amount : parseFloat(txn.amount);
+    const shownCurrency = display ? display.currency : txn.currency || userCurrency;
+    const mainAmount = shownAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 });
     const sign = txn.type === "income" ? "+" : "-";
     const origAmount = txn.originalAmount ? parseFloat(txn.originalAmount) : null;
     const origCurrency = txn.originalCurrency;
 
-    if (origAmount && origCurrency && origCurrency.toUpperCase() !== userCurrency.toUpperCase()) {
-      const origFormatted = origAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 });
-      return (
-        <div className="text-right">
-          <p className={`text-sm font-semibold ${txn.type === "income" ? "text-income" : "text-expense"}`}>
-            {sign}{mainAmount} {userCurrency}
-          </p>
-          <p className="text-[10px] text-muted-foreground">
-            {sign}{origFormatted} {origCurrency}
-          </p>
-        </div>
-      );
-    }
+    // Show what was actually entered when it differs from what is displayed.
+    const showOriginal =
+      origAmount && origCurrency && origCurrency.toUpperCase() !== shownCurrency.toUpperCase();
 
     return (
-      <p className={`text-sm font-semibold ${txn.type === "income" ? "text-income" : "text-expense"}`}>
-        {sign}{mainAmount}
-      </p>
+      <div className="text-right">
+        <p className={`text-sm font-semibold ${txn.type === "income" ? "text-income" : "text-expense"}`}>
+          {sign}{mainAmount} {shownCurrency}
+        </p>
+        {showOriginal && (
+          <p className="text-[10px] text-muted-foreground">
+            {sign}{origAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} {origCurrency}
+          </p>
+        )}
+        {display && display.converted === false && (
+          // No rate was available, so this is still in its own currency.
+          <p className="text-[10px] text-muted-foreground">≈ курс недоступен</p>
+        )}
+      </div>
     );
   };
 
@@ -414,7 +422,7 @@ export default function Home() {
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <div className="mr-1">
-                            {formatAmount(t_item.transaction)}
+                            {formatAmount(t_item.transaction, (t_item as any).display)}
                           </div>
                           <Button
                             variant="ghost"
