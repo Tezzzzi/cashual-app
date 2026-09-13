@@ -970,7 +970,15 @@ function WalletSection() {
 
   const utils = trpc.useUtils();
 
-  const { data: tokenData, isLoading } = trpc.settings.getWalletToken.useQuery();
+  // Always refetch on mount. React Query's cache survives while the Telegram
+  // Mini App webview stays alive, so reopening Settings could show a token that
+  // had since been regenerated — and copying that stale value produces a
+  // Shortcut that silently 401s.
+  const { data: tokenData, isLoading } = trpc.settings.getWalletToken.useQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
 
   const generateToken = trpc.settings.generateWalletToken.useMutation({
     onSuccess: () => {
