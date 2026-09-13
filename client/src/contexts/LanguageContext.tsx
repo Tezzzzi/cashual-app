@@ -300,6 +300,10 @@ const translations = {
     wallet_link_copied_toast: "Ссылка скопирована! Откройте Shortcuts на iPhone и создайте автоматизацию",
     wallet_hide_details: "Скрыть детали",
     wallet_show_details: "Показать детали",
+    wallet_copy_voice_url: "Скопировать адрес для голоса",
+    wallet_voice_hint: "Для голосового Shortcut: метод POST, тело JSON с полями token и text",
+    wallet_regenerate_warning:
+      "Новый токен сразу перестанет совпадать с тем, что уже вписан в Shortcuts — их придётся настроить заново. Продолжить?",
   },
 
   az: {
@@ -598,6 +602,10 @@ const translations = {
     wallet_link_copied_toast: "Link kopyalandı! iPhone-da Shortcuts açın və avtomatlaşdırma yaradın",
     wallet_hide_details: "Detalları gizlət",
     wallet_show_details: "Detalları göstər",
+    wallet_copy_voice_url: "Səs üçün ünvanı kopyala",
+    wallet_voice_hint: "Səsli Shortcut üçün: POST metodu, JSON gövdəsində token və text sahələri",
+    wallet_regenerate_warning:
+      "Yeni token Shortcuts-da yazılmış köhnə tokenlə dərhal uyğunsuz olacaq — onları yenidən qurmaq lazım gələcək. Davam edilsin?",
   },
 
   en: {
@@ -896,6 +904,10 @@ const translations = {
     wallet_link_copied_toast: "Link copied! Open Shortcuts on iPhone and create automation",
     wallet_hide_details: "Hide details",
     wallet_show_details: "Show details",
+    wallet_copy_voice_url: "Copy voice URL",
+    wallet_voice_hint: "For the voice Shortcut: POST, JSON body with token and text fields",
+    wallet_regenerate_warning:
+      "A new token stops matching the one already saved in your Shortcuts — you will have to set them up again. Continue?",
   },
 } as const;
 

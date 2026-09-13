@@ -958,11 +958,15 @@ export default function Settings() {
 // ─── Apple Wallet Section ─────────────────────────────────────────────────────
 
 const WEBHOOK_BASE = "https://cashual-app-production.up.railway.app/api/wallet/transaction";
+// The voice Shortcut posts here instead, with a JSON body. Previously this URL
+// was not offered anywhere, so it had to be typed by hand.
+const VOICE_BASE = "https://cashual-app-production.up.railway.app/api/wallet/voice";
 
 function WalletSection() {
   const { t } = useLanguage();
   const [showDetails, setShowDetails] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // Which button was last copied, so only that one shows confirmation.
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -989,10 +993,14 @@ function WalletSection() {
   };
 
   const handleRegenerate = async () => {
+    // Regenerating silently invalidates the token already saved in the user's
+    // Shortcuts, which then fail with 401 and drop transactions without any
+    // visible sign. Make that consequence explicit before it happens.
+    if (walletToken && !window.confirm(t("wallet_regenerate_warning"))) return;
     await generateToken.mutateAsync();
   };
 
-  const copyLink = useCallback(async (text: string) => {
+  const copyLink = useCallback(async (text: string, key = "link") => {
     try {
       // Try Telegram WebApp clipboard first
       if ((window as any).Telegram?.WebApp?.readTextFromClipboard) {
@@ -1012,9 +1020,9 @@ function WalletSection() {
       document.execCommand("copy");
       document.body.removeChild(textarea);
     }
-    // Show visual feedback on button
-    setCopied(true);
-    setTimeout(() => setCopied(false), 4000);
+    // Show visual feedback on the button that was actually pressed
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 4000);
   }, []);
 
   if (isLoading) {
@@ -1064,12 +1072,17 @@ function WalletSection() {
             <span>{t("wallet_connected")}</span>
           </div>
 
-          {/* Primary action: Copy link */}
+          {/* Primary action: Copy the Apple Wallet automation link */}
           <Button
-            className={`w-full ${copied ? "bg-green-600 hover:bg-green-600" : ""}`}
-            onClick={() => copyLink(WEBHOOK_BASE + "?token=" + walletToken + "&amount=AMOUNT&merchant=MERCHANT&currency=CURRENCY_CODE")}
+            className={`w-full ${copiedKey === "link" ? "bg-green-600 hover:bg-green-600" : ""}`}
+            onClick={() =>
+              copyLink(
+                WEBHOOK_BASE + "?token=" + walletToken + "&amount=AMOUNT&merchant=MERCHANT&currency=CURRENCY_CODE",
+                "link"
+              )
+            }
           >
-            {copied ? (
+            {copiedKey === "link" ? (
               <>
                 <Check className="mr-2 h-4 w-4" />
                 {t("wallet_link_copied_toast")}
@@ -1081,6 +1094,47 @@ function WalletSection() {
               </>
             )}
           </Button>
+
+          {/* The token on its own: the voice Shortcut needs it as a JSON field,
+              and extracting it out of the link by hand is how it gets mistyped. */}
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              className={copiedKey === "token" ? "border-green-600 text-green-600" : ""}
+              onClick={() => copyLink(walletToken, "token")}
+            >
+              {copiedKey === "token" ? (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  {t("wallet_copied")}
+                </>
+              ) : (
+                <>
+                  <Copy className="mr-2 h-4 w-4" />
+                  {t("wallet_copy_token")}
+                </>
+              )}
+            </Button>
+
+            <Button
+              variant="outline"
+              className={copiedKey === "voice" ? "border-green-600 text-green-600" : ""}
+              onClick={() => copyLink(VOICE_BASE, "voice")}
+            >
+              {copiedKey === "voice" ? (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  {t("wallet_copied")}
+                </>
+              ) : (
+                <>
+                  <Copy className="mr-2 h-4 w-4" />
+                  {t("wallet_copy_voice_url")}
+                </>
+              )}
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">{t("wallet_voice_hint")}</p>
 
           {/* Quick setup summary */}
           <div className="bg-secondary/30 rounded-lg p-3 space-y-2">
