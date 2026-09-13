@@ -1085,7 +1085,11 @@ function WalletSection() {
             {copiedKey === "link" ? (
               <>
                 <Check className="mr-2 h-4 w-4" />
-                {t("wallet_link_copied_toast")}
+                {/* Short label only. The full sentence is 73 characters in
+                    Russian and Button forbids wrapping, so it used to burst out
+                    of the card the moment this button was pressed; the guidance
+                    now lives in the wrapping paragraph below. */}
+                {t("wallet_copied")}
               </>
             ) : (
               <>
@@ -1095,12 +1099,20 @@ function WalletSection() {
             )}
           </Button>
 
+          {copiedKey === "link" && (
+            // A <p> wraps, unlike the button, so the full instruction is safe here.
+            <p className="text-[11px] text-green-600">{t("wallet_link_copied_toast")}</p>
+          )}
+
           {/* The token on its own: the voice Shortcut needs it as a JSON field,
-              and extracting it out of the link by hand is how it gets mistyped. */}
-          <div className="grid grid-cols-2 gap-2">
+              and extracting it out of the link by hand is how it gets mistyped.
+              Stacked, not side by side: Button sets `whitespace-nowrap`, and at
+              half width the Russian and Azerbaijani labels overflow the button
+              instead of wrapping. Full width fits every language. */}
+          <div className="space-y-2">
             <Button
               variant="outline"
-              className={copiedKey === "token" ? "border-green-600 text-green-600" : ""}
+              className={`w-full ${copiedKey === "token" ? "border-green-600 text-green-600" : ""}`}
               onClick={() => copyLink(walletToken, "token")}
             >
               {copiedKey === "token" ? (
@@ -1118,7 +1130,7 @@ function WalletSection() {
 
             <Button
               variant="outline"
-              className={copiedKey === "voice" ? "border-green-600 text-green-600" : ""}
+              className={`w-full ${copiedKey === "voice" ? "border-green-600 text-green-600" : ""}`}
               onClick={() => copyLink(VOICE_BASE, "voice")}
             >
               {copiedKey === "voice" ? (
