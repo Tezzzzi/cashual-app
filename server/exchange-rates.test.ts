@@ -45,6 +45,50 @@ describe("tryGetExchangeRate (strict)", () => {
   });
 });
 
+describe("historical lookups never silently use today's rates", () => {
+  // The rate cache is module-level with a 24h TTL and survives vi.resetModules,
+  // so each case uses its own date to avoid reading another's cached entry.
+  it("requests the dated path from both sources", async () => {
+    const urls: string[] = [];
+    global.fetch = vi.fn(async (url: any) => {
+      urls.push(String(url));
+      throw new Error("offline");
+    }) as any;
+
+    await tryGetExchangeRate("AZN", "EUR", Date.parse("2025-03-04T00:00:00Z"));
+
+    // The fallback used to point at `@latest`, so an outage of the dated
+    // endpoint converted old transactions at the current rate.
+    expect(urls.length).toBeGreaterThan(0);
+    for (const u of urls) {
+      expect(u).toContain("2025-03-04");
+      expect(u).not.toContain("@latest");
+      expect(u).not.toContain("//latest.");
+    }
+  });
+
+  it("rejects a response whose date is not the one requested", async () => {
+    // A CDN can serve a different snapshot than the URL asked for.
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ date: "2026-09-17", azn: { eur: 0.5 } }),
+    })) as any;
+
+    const rate = await tryGetExchangeRate("AZN", "EUR", Date.parse("2025-03-05T00:00:00Z"));
+    expect(rate).toBeNull();
+  });
+
+  it("accepts a response whose date matches", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ date: "2025-03-06", azn: { eur: 0.5 } }),
+    })) as any;
+
+    const rate = await tryGetExchangeRate("AZN", "EUR", Date.parse("2025-03-06T00:00:00Z"));
+    expect(rate).toBe(0.5);
+  });
+});
+
 describe("getExchangeRate (loose, used when recording)", () => {
   it("still falls back to an approximate rate so an expense can be saved", async () => {
     breakNetwork();

@@ -63,13 +63,14 @@ async function fetchRatesUncached(
   date: string | undefined,
   cacheKey: string
 ): Promise<{ rates: Record<string, number>; source: RateSource }> {
-  // Primary URL: pages.dev domain
-  const baseUrl = date
-    ? `https://${date}.currency-api.pages.dev/v1/currencies/${from}.min.json`
-    : `https://latest.currency-api.pages.dev/v1/currencies/${from}.min.json`;
-
-  // Fallback URL: jsdelivr CDN
-  const fallbackUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${from}.min.json`;
+  // Both sources must respect the requested date. The fallback previously
+  // pointed at `@latest` regardless, so an outage of the dated endpoint quietly
+  // converted a year-old transaction at today's rate — and reported it as a
+  // live rate. Historical figures would then drift every time a report was
+  // opened, which is exactly what date-based conversion exists to prevent.
+  const version = date ?? "latest";
+  const baseUrl = `https://${version}.currency-api.pages.dev/v1/currencies/${from}.min.json`;
+  const fallbackUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${version}/v1/currencies/${from}.min.json`;
 
   let rates: Record<string, number> | null = null;
 
@@ -82,6 +83,14 @@ async function fetchRatesUncached(
 
       if (res.ok) {
         const data = await res.json() as { date: string; [key: string]: unknown };
+        // Trust the payload's own date over the URL: a CDN may serve a
+        // different snapshot than the one requested.
+        if (date && data.date && data.date !== date) {
+          console.warn(
+            `[exchange-rates] ${url} returned ${data.date}, expected ${date} — ignoring`
+          );
+          continue;
+        }
         const currencyRates = data[from] as Record<string, number> | undefined;
         if (currencyRates && typeof currencyRates === "object") {
           rates = currencyRates;

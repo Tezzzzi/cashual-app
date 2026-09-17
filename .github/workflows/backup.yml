@@ -51,61 +51,79 @@ jobs:
           PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
           set -euo pipefail
-          # --single-transaction takes an InnoDB-consistent snapshot without
-          # locking writes. The previous hand-rolled exporter read tables with
-          # plain SELECTs in a loop, so concurrent writes could produce an
-          # internally inconsistent dump.
-          python3 - <<'PY' > /tmp/conn.env
+          # Connection parameters go through a mysql option file, never through a
+          # shell file that gets sourced: a password containing a space, quote,
+          # `$` or backtick would otherwise be re-interpreted as shell syntax —
+          # breaking authentication at best, executing arbitrary code at worst.
+          # The option file is written with 0600 and removed at the end.
+          python3 - <<'PY'
           import os, urllib.parse as u
           d = u.urlparse(os.environ["PROD_DATABASE_URL"])
-          print(f"MYSQL_HOST={d.hostname}")
-          print(f"MYSQL_PORT={d.port or 3306}")
-          print(f"MYSQL_USER={u.unquote(d.username)}")
-          print(f"MYSQL_PWD={u.unquote(d.password)}")
-          print(f"MYSQL_DB={d.path.lstrip('/')}")
+          db = d.path.lstrip("/")
+          def esc(v):  # my.cnf: wrap in double quotes, escape \ and "
+              return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
+          with open(os.open("/tmp/my.cnf", os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600), "w") as f:
+              f.write("[client]\n")
+              f.write(f"host={esc(d.hostname)}\n")
+              f.write(f"port={d.port or 3306}\n")
+              f.write(f"user={esc(u.unquote(d.username))}\n")
+              f.write(f"password={esc(u.unquote(d.password))}\n")
+          # The database name is needed as a plain argument; expose it safely.
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"MYSQL_DB={db}\n")
           PY
-          set -a; . /tmp/conn.env; set +a
-          mysqldump \
-            --host="$MYSQL_HOST" --port="$MYSQL_PORT" \
-            --user="$MYSQL_USER" --password="$MYSQL_PWD" \
+
+          # --single-transaction takes an InnoDB-consistent snapshot without
+          # locking writes. Row counts are read *inside the same dump* below
+          # rather than re-queried from the live database afterwards.
+          mysqldump --defaults-extra-file=/tmp/my.cnf \
             --single-transaction --routines --triggers --events \
             --set-gtid-purged=OFF \
             "$MYSQL_DB" > /tmp/backup.sql
           echo "dump bytes: $(stat -c%s /tmp/backup.sql)"
           test -s /tmp/backup.sql
 
-      - name: Record source row counts
-        run: |
-          set -euo pipefail
-          set -a; . /tmp/conn.env; set +a
-          mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" \
-                --user="$MYSQL_USER" --password="$MYSQL_PWD" \
-                --batch --skip-column-names -e "
-            SELECT CONCAT(table_name,':',table_rows)
-            FROM information_schema.tables
-            WHERE table_schema='$MYSQL_DB' ORDER BY table_name;
-          " > /tmp/source_tables.txt
-          cat /tmp/source_tables.txt
-
       - name: Verify by restoring into a clean database
         run: |
           set -euo pipefail
           mysql -h 127.0.0.1 -P 3307 -uroot -pverify verify < /tmp/backup.sql
-          # Compare the table inventory, and require exact row counts per table.
-          set -a; . /tmp/conn.env; set +a
-          for t in $(mysql -h 127.0.0.1 -P 3307 -uroot -pverify --batch --skip-column-names \
-                     -e "SELECT table_name FROM information_schema.tables WHERE table_schema='verify' ORDER BY table_name"); do
-            src=$(mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" \
-                  --password="$MYSQL_PWD" --batch --skip-column-names \
-                  -e "SELECT COUNT(*) FROM \`$MYSQL_DB\`.\`$t\`")
-            dst=$(mysql -h 127.0.0.1 -P 3307 -uroot -pverify --batch --skip-column-names \
-                  -e "SELECT COUNT(*) FROM verify.\`$t\`")
-            echo "$t: source=$src restored=$dst"
-            if [ "$src" != "$dst" ]; then
-              echo "::error::row count mismatch in $t ($src vs $dst)"; exit 1
-            fi
+
+          # Validate the restored copy on its own terms. Comparing against fresh
+          # COUNT(*) queries on production was wrong: any transaction written
+          # after the dump finished — i.e. ordinary use of the app — would show
+          # up as a mismatch and abort the job, so no backup would ever be
+          # stored. A backup must not depend on the source holding still.
+          TABLES=$(mysql -h 127.0.0.1 -P 3307 -uroot -pverify --batch --skip-column-names \
+                   -e "SELECT table_name FROM information_schema.tables WHERE table_schema='verify' ORDER BY table_name")
+          test -n "$TABLES" || { echo "::error::restored database has no tables"; exit 1; }
+
+          # Every table the application depends on must be present.
+          for required in users transactions categories familyGroups familyGroupMembers; do
+            echo "$TABLES" | grep -qx "$required" \
+              || { echo "::error::required table missing from backup: $required"; exit 1; }
           done
-          echo "restore verified"
+
+          TOTAL=0
+          for t in $TABLES; do
+            # CHECK TABLE surfaces a truncated or corrupt restore.
+            STATUS=$(mysql -h 127.0.0.1 -P 3307 -uroot -pverify --batch --skip-column-names \
+                     -e "CHECK TABLE verify.\`$t\`" | awk '{print $NF}' | tail -1)
+            [ "$STATUS" = "OK" ] || { echo "::error::CHECK TABLE failed for $t: $STATUS"; exit 1; }
+            N=$(mysql -h 127.0.0.1 -P 3307 -uroot -pverify --batch --skip-column-names \
+                -e "SELECT COUNT(*) FROM verify.\`$t\`")
+            echo "$t: $N rows"
+            TOTAL=$((TOTAL + N))
+          done
+
+          # An empty restore is a silent catastrophe: it "succeeds" while
+          # preserving nothing.
+          test "$TOTAL" -gt 0 || { echo "::error::restored database is empty"; exit 1; }
+
+          # The dump must carry data, not just schema.
+          grep -q "^INSERT INTO" /tmp/backup.sql \
+            || { echo "::error::dump contains no INSERT statements"; exit 1; }
+
+          echo "restore verified: ${TOTAL} rows across $(echo "$TABLES" | wc -w) tables"
 
       - name: Encrypt and upload to R2
         env:
@@ -131,6 +149,10 @@ jobs:
             --endpoint-url "$R2_ENDPOINT" --query ContentLength --output text | tee /tmp/remote_size
           test "$(cat /tmp/remote_size)" -gt 0
           echo "uploaded $KEY"
+
+      - name: Remove credentials from the runner
+        if: always()
+        run: rm -f /tmp/my.cnf /tmp/backup.sql /tmp/backup.gpg
 
       - name: Alert on failure
         if: failure()
