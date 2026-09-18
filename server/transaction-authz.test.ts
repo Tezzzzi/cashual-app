@@ -96,19 +96,26 @@ function compiledVisibility(userIds: number[], familyGroupId?: number) {
 describe("buildMultiUserVisibilityFilter", () => {
   const MEMBER_ID = 4;
 
-  it("shows only family rows of other members", () => {
+  it("restricts a shared family view to family rows for everyone", () => {
     const { sql } = compiledVisibility([CALLER_ID, MEMBER_ID]);
-    // The other-members branch must always carry the isFamily restriction, so a
-    // member's personal spending never surfaces in a shared family view.
+    // The restriction covers the caller too. Exempting them meant each member
+    // saw their own personal spending inside the shared total, so the same
+    // family report showed a different number to each person.
     expect(sql).toContain("transactions.isfamily = ?");
-    expect(sql).toContain("transactions.userid in (?)");
+    expect(sql).toContain("transactions.userid in (?, ?)");
   });
 
-  it("still shows the caller's own rows in full", () => {
+  it("does not carve out an unrestricted branch for the caller", () => {
     const { sql } = compiledVisibility([CALLER_ID, MEMBER_ID]);
-    // Own branch is unrestricted: personal + family, joined by OR.
+    // No OR branch: a single condition set applies to every requested member.
+    expect(sql).not.toContain(" or ");
+  });
+
+  it("shows everything of the caller's when only they were asked for", () => {
+    // scope="mine" is the personal view, where personal rows belong.
+    const { sql } = compiledVisibility([CALLER_ID]);
     expect(sql).toContain("transactions.userid = ?");
-    expect(sql).toContain(" or ");
+    expect(sql).not.toContain("transactions.isfamily");
   });
 
   it("pins other members' rows to the requested family group", () => {

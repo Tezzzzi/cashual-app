@@ -255,22 +255,24 @@ export function buildMultiUserVisibilityFilter(
   familyGroupId?: number
 ) {
   const otherIds = userIds.filter(id => id !== callerId);
-  const ownRows = eq(transactions.userId, callerId);
 
-  if (otherIds.length === 0) return ownRows;
+  // Only the caller was asked for — this is their personal view, so everything
+  // of theirs belongs in it, personal and family alike.
+  if (otherIds.length === 0) return eq(transactions.userId, callerId);
 
-  const otherConditions = [
-    inArray(transactions.userId, otherIds),
+  // More than one person means a shared family view, and there the restriction
+  // applies to everyone including the caller. Exempting the caller made the
+  // same family report show a different total to each member, because each saw
+  // their own personal spending folded into it. A family figure has to mean the
+  // same thing to everyone looking at it.
+  const conditions = [
+    inArray(transactions.userId, userIds),
     eq(transactions.isFamily, true),
   ];
   if (familyGroupId) {
-    otherConditions.push(eq(transactions.familyGroupId, familyGroupId));
+    conditions.push(eq(transactions.familyGroupId, familyGroupId));
   }
-  const otherRows = and(...otherConditions);
-
-  // scope="partner" excludes the caller, so only add the own-rows branch when
-  // the caller was actually asked for.
-  return userIds.includes(callerId) ? or(ownRows, otherRows) : otherRows;
+  return and(...conditions);
 }
 
 export async function getTransactions(
