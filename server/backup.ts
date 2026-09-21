@@ -18,8 +18,6 @@ type BackupState = BackupMetadata & {
 };
 
 let lastBackup: BackupState | null = null;
-let schedulerStarted = false;
-let nextBackupTimeout: NodeJS.Timeout | null = null;
 let backupInProgress: Promise<BackupState> | null = null;
 
 function readBearerOrCookieToken(req: express.Request): string | null {
@@ -199,50 +197,21 @@ export function registerBackupRoute(app: express.Express) {
   });
 }
 
-function millisecondsUntilNextDailyBackup(): number {
-  const now = new Date();
-  const next = new Date(now);
-  next.setUTCHours(3, 15, 0, 0);
-  if (next <= now) {
-    next.setUTCDate(next.getUTCDate() + 1);
-  }
-  return next.getTime() - now.getTime();
-}
-
-function scheduleNextDailyBackup() {
-  const delay = millisecondsUntilNextDailyBackup();
-  const nextRun = new Date(Date.now() + delay).toISOString();
-  console.log(`[backup] Next daily SQL backup scheduled for ${nextRun}`);
-
-  nextBackupTimeout = setTimeout(async () => {
-    try {
-      await generateSqlBackup("daily-scheduled");
-    } catch (error) {
-      console.error("[backup] Scheduled SQL backup failed:", error);
-    } finally {
-      scheduleNextDailyBackup();
-    }
-  }, delay);
-}
-
-export function startDailyBackupScheduler() {
-  if (schedulerStarted) return;
-  schedulerStarted = true;
-
-  if (!process.env.DATABASE_URL) {
-    console.warn("[backup] DATABASE_URL is not configured; daily backup scheduler is disabled.");
-    return;
-  }
-
-  console.log("[backup] Starting daily SQL backup scheduler.");
-  void generateSqlBackup("startup").catch((error) => {
-    console.error("[backup] Startup SQL backup failed:", error);
-  });
-  scheduleNextDailyBackup();
-}
-
-export function stopDailyBackupSchedulerForTests() {
-  if (nextBackupTimeout) clearTimeout(nextBackupTimeout);
-  nextBackupTimeout = null;
-  schedulerStarted = false;
-}
+/**
+ * The daily scheduler that used to live here has been removed.
+ *
+ * It was never a backup mechanism: it held the dump in this process's memory
+ * and the next run in a setTimeout, so nothing was written anywhere durable,
+ * the copy died with the process, and a run was skipped entirely whenever the
+ * app was down — including the day the database was wiped, when a backup was
+ * most needed.
+ *
+ * Backups now run in .github/workflows/backup.yml: outside the application and
+ * outside Railway, taking a consistent mysqldump, proving it restores into a
+ * clean MySQL, encrypting it and uploading to R2, with an alert on failure.
+ * Keeping a second, weaker mechanism alongside it would only invite the
+ * assumption that the app is protecting itself.
+ *
+ * generateSqlBackup and the admin route below remain, for taking an on-demand
+ * dump before a risky operation.
+ */

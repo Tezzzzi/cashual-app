@@ -67,10 +67,21 @@ row counts**, then encrypts (AES256) and uploads to Cloudflare R2. Failure sends
 a Telegram alert — a backup that fails silently is worse than none, because it
 buys false confidence.
 
-The in-process scheduler in `server/backup.ts` is **not** a backup. It kept the
-dump in the app's memory and a `setTimeout` in the process, so the copy was
-skipped whenever the app was down and died with the process regardless. Do not
-rely on it.
+The in-process scheduler that used to live in `server/backup.ts` has been
+removed: it kept the dump in the app's memory and the next run in a
+`setTimeout`, so nothing durable was written, the copy died with the process,
+and a run was skipped entirely whenever the app was down. `generateSqlBackup`
+and the admin routes `/api/backup` and `/api/backup/status` remain, for taking
+an on-demand dump before a risky operation.
+
+**First verified backup: 2026-09-21** — `cashual/2026/09/21/…sql.gz.gpg`,
+51 rows across 8 tables, restored into a clean MySQL and checked. The alert
+path was verified the same day by forcing a failure on a throwaway branch.
+
+Alerts reuse the **product** bot's token rather than a separate one. When that
+token is rotated — it leaked to the public repo and is due for replacement —
+update **both** `TELEGRAM_BOT_TOKEN` in Railway and `TELEGRAM_ALERT_BOT_TOKEN`
+in GitHub secrets, or alerts will go quiet without anything appearing to break.
 
 ### Required GitHub secrets
 
