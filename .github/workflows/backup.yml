@@ -68,10 +68,16 @@ jobs:
               f.write(f"port={d.port or 3306}\n")
               f.write(f"user={esc(u.unquote(d.username))}\n")
               f.write(f"password={esc(u.unquote(d.password))}\n")
-          # The database name is needed as a plain argument; expose it safely.
-          with open(os.environ["GITHUB_ENV"], "a") as f:
-              f.write(f"MYSQL_DB={db}\n")
+          # The database name is needed as a plain argument. It goes to a file
+          # rather than $GITHUB_ENV, which only takes effect in *later* steps —
+          # reading it here would leave the variable unset in this one.
+          with open("/tmp/dbname", "w") as f:
+              f.write(db)
           PY
+
+          # Quoted command substitution: the value is not re-split or re-parsed.
+          MYSQL_DB="$(cat /tmp/dbname)"
+          test -n "$MYSQL_DB"
 
           # --single-transaction takes an InnoDB-consistent snapshot without
           # locking writes. Row counts are read *inside the same dump* below
@@ -152,7 +158,7 @@ jobs:
 
       - name: Remove credentials from the runner
         if: always()
-        run: rm -f /tmp/my.cnf /tmp/backup.sql /tmp/backup.gpg
+        run: rm -f /tmp/my.cnf /tmp/dbname /tmp/backup.sql /tmp/backup.gpg
 
       - name: Alert on failure
         if: failure()
