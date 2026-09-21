@@ -51,6 +51,7 @@ export const categories = mysqlTable("categories", {
   isPreset: boolean("isPreset").default(false).notNull(),
   userId: int("userId"), // null = preset (global), non-null = user-created
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type Category = typeof categories.$inferSelect;
@@ -127,6 +128,9 @@ export type InsertBusinessGroup = typeof businessGroups.$inferInsert;
 export const familyGroups = mysqlTable("familyGroups", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 128 }).notNull(),
+  // Present in the database, previously undeclared here.
+  icon: varchar("icon", { length: 64 }).notNull().default("👨‍👩‍👦"),
+  color: varchar("color", { length: 32 }).notNull().default("#8b5cf6"),
   inviteCode: varchar("inviteCode", { length: 16 }).notNull().unique(),
   ownerId: int("ownerId").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -143,6 +147,10 @@ export const familyGroupMembers = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     familyGroupId: int("familyGroupId").notNull(),
     userId: int("userId").notNull(),
+    // Already present in the database but previously undeclared here, so the
+    // application could not see it. Note there is no "child" member yet — the
+    // family-visibility rule will need the enum widened.
+    role: mysqlEnum("role", ["owner", "admin", "member"]).default("member").notNull(),
     joinedAt: timestamp("joinedAt").defaultNow().notNull(),
   },
   // A user must not be able to join the same group twice: duplicate membership
@@ -168,6 +176,14 @@ export const familyPermissions = mysqlTable("familyPermissions", {
   grantorId: int("grantorId").notNull(), // user who owns the expenses
   granteeId: int("granteeId").notNull(), // user who can view them
   canViewExpenses: boolean("canViewExpenses").default(true).notNull(),
+  // The four flags below and `userId` exist in the database but were never
+  // declared here, so nothing in the application could read them. Only
+  // canViewExpenses is currently consulted — see getViewableUserIds.
+  userId: int("userId"),
+  canViewTransactions: boolean("canViewTransactions").default(true).notNull(),
+  canAddTransactions: boolean("canAddTransactions").default(true).notNull(),
+  canEditTransactions: boolean("canEditTransactions").default(false).notNull(),
+  canDeleteTransactions: boolean("canDeleteTransactions").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

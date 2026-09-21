@@ -660,6 +660,9 @@ Always return a transactions array, even for a single transaction (array with on
           isPreset: false,
           userId: ctx.user.id,
           createdAt: new Date(),
+          // Mirrors the column the database has always had; declaring it in
+          // drizzle/schema.ts made its absence here a type error.
+          updatedAt: new Date(),
         };
       };
 
@@ -1018,6 +1021,9 @@ Always return a transactions array, even for a single receipt (array with one it
           isPreset: false,
           userId: ctx.user.id,
           createdAt: new Date(),
+          // Mirrors the column the database has always had; declaring it in
+          // drizzle/schema.ts made its absence here a type error.
+          updatedAt: new Date(),
         };
       };
 
