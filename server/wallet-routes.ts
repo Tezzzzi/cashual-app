@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { eq } from "drizzle-orm";
 import { users, transactions, categories } from "../drizzle/schema";
+import { findDuplicate } from "./duplicates";
 import {
   getDb,
   getCategories,
@@ -467,6 +468,8 @@ Always return a transactions array, even for a single transaction.`,
           category: string;
           description: string;
         }> = [];
+        // Reported back so a skipped repeat is visible rather than silent.
+        const skippedDuplicates: string[] = [];
 
         for (const tx of parsed.transactions) {
           // Resolve category
@@ -534,6 +537,24 @@ Always return a transactions array, even for a single transaction.`,
             if (bg) businessGroupId = (bg as any).id;
           }
 
+          // Saying the same expense twice — a misfired Shortcut, or simply
+          // repeating yourself — should not record it twice.
+          const voiceDup = await findDuplicate(
+            user.id,
+            {
+              amount: tx.amount,
+              description: tx.description,
+              currency: tx.currency.toUpperCase(),
+              date: fixedDate,
+            },
+            "voice"
+          );
+          if (voiceDup) {
+            console.log(`[Wallet/Voice] duplicate of #${voiceDup.id} — not recording`);
+            skippedDuplicates.push(tx.description);
+            continue;
+          }
+
           // Save transaction
           const result = await createTransaction({
             userId: user.id,
@@ -572,6 +593,9 @@ Always return a transactions array, even for a single transaction.`,
           const lines = savedTransactions.map((t) =>
             `${t.type === "income" ? "📥" : "📤"} ${t.description} ${t.amount} ${t.currency} → ${t.category}`
           );
+          if (skippedDuplicates.length > 0) {
+            lines.push(`⏭ Повтор пропущен: ${skippedDuplicates.join(", ")}`);
+          }
           const notificationText = `🎙 Siri: ${text}\n\n${lines.join("\n")}`;
           await sendTelegramNotification(user.telegramId, notificationText);
         }
@@ -646,6 +670,28 @@ Always return a transactions array, even for a single transaction.`,
         const txDate = date ? new Date(date).getTime() : Date.now();
         const txCurrency = (currency || user.preferredCurrency || "EUR").toUpperCase();
         const description = card ? `${merchant} (${card})` : merchant;
+
+        // A declined tap reports exactly like a successful one, so paying again
+        // fires this webhook again. Answer success either way: a 4xx would make
+        // the Shortcut look broken for doing the right thing.
+        const duplicate = await findDuplicate(
+          user.id,
+          { amount: numAmount, description, currency: txCurrency, date: txDate, card },
+          "wallet"
+        );
+        if (duplicate) {
+          console.log(
+            `[Wallet] duplicate of #${duplicate.id} (${merchant} ${numAmount} ${txCurrency}` +
+              `${duplicate.differentCard ? ", different card" : ""}) — not recording`
+          );
+          if (user.telegramId) {
+            await sendTelegramNotification(
+              user.telegramId,
+              `⏭ Повтор пропущен: ${merchant} ${numAmount}${txCurrency}\nУже записано ранее.`
+            );
+          }
+          return res.json({ success: true, duplicate: true, existingId: duplicate.id });
+        }
 
         // Save transaction (default to family)
         const result = await createTransaction({
@@ -745,6 +791,29 @@ Always return a transactions array, even for a single transaction.`,
         const description = cardName
           ? `${merchant} (${cardName})`
           : merchant;
+
+        // Same retry protection as the GET route — see the note there.
+        const dup = await findDuplicate(
+          user.id,
+          {
+            amount,
+            description,
+            currency: currency.toUpperCase(),
+            date: txDate,
+            card: cardName,
+          },
+          "wallet"
+        );
+        if (dup) {
+          console.log(`[Wallet] duplicate of #${dup.id} (${merchant}) — not recording`);
+          if (user.telegramId) {
+            await sendTelegramNotification(
+              user.telegramId,
+              `⏭ Повтор пропущен: ${merchant} ${amount}${currency.toUpperCase()}\nУже записано ранее.`
+            );
+          }
+          return res.status(200).json({ success: true, duplicate: true, existingId: dup.id });
+        }
 
         // Save transaction (default to family)
         const result = await createTransaction({

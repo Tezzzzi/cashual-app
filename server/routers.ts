@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { toDisplayAmounts } from "./money";
+import { findDuplicate } from "./duplicates";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import {
@@ -1096,17 +1097,19 @@ Always return a transactions array, even for a single receipt (array with one it
         const tx = input.transactions[i];
         const txAmount = parseFloat(tx.amount);
 
-        // Duplicate detection: same amount + same description (case-insensitive) within ±24h window
-        const isDuplicate = existing.some((e) => {
-          const existingAmount = parseFloat(e.transaction.amount);
-          const amountMatch = Math.abs(existingAmount - txAmount) < 0.01;
-          const descMatch =
-            tx.description &&
-            e.transaction.description &&
-            e.transaction.description.toLowerCase().trim() === tx.description.toLowerCase().trim();
-          const dateMatch = Math.abs(e.transaction.date - tx.date) < 24 * 60 * 60 * 1000;
-          return amountMatch && descMatch && dateMatch;
-        });
+        // Shared with the Wallet and voice paths so one rule governs all three;
+        // receipts keep the wider 24h window because they are scanned later.
+        const isDuplicate =
+          (await findDuplicate(
+            ctx.user.id,
+            {
+              amount: txAmount,
+              description: tx.description,
+              currency: tx.currency || ctx.user.preferredCurrency,
+              date: tx.date,
+            },
+            "receipt"
+          )) !== null;
 
         if (isDuplicate) {
           skipped.push(i);
